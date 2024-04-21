@@ -185,18 +185,7 @@ class NewThread extends Thread {
             M2[i][j]=Integer.parseInt(M[l*n+4+i*m+j]);
           }
         }
-        int[][] mResult = new int [l][m];
-        String newM="";
-        for (int i=0; i<l; i++) {
-          for (int j=0; j<m; j++) {
-            mResult[i][j] = 0;
-            for (int r=0; r<n; r++) {
-              mResult[i][j]+=M1[i][r]*M2[r][j];
-            }
-            newM+=mResult[i][j];
-            newM+=" ";
-          }
-        }
+        String newM=Multiply(M1, M2);
         Instant Finish = Instant.now();
         long multiplication = Duration.between(Start, Finish).toMillis();
         try (FileWriter f = new FileWriter("log.txt", true); 
@@ -227,8 +216,22 @@ class NewThread extends Thread {
       }
     }
   }
+  public static String Multiply (int[][] M1, int[][] M2) {
+  	String Result ="";
+    for (int i=0; i<M1.length; i++) {
+        for (int j=0; j<M2[0].length; j++) {
+          int temp = 0;
+          for (int k=0; k<M2.length; k++) {
+            temp+=M1[i][k]*M2[k][j];
+          }
+          Result+=temp+" ";
+        }
+      }
+  	return Result;
+  }
 }
 class Window extends Frame implements ActionListener {
+  private static final long serialVersionUID = -71397683808689083L;
   Checkbox active, passive;
   Button OK;
   CheckboxGroup mode;
@@ -377,5 +380,5 @@ public class Server {
       while (true) {
         new NewThread(serverNode, serverAddresses);
       }
-  }
+    }
 }

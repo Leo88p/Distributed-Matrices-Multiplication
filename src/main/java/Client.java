@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 import java.time.*;
+import java.util.Scanner;
 class ClientThread extends Thread {
     private InetAddress serverIP;
     private String Request;
@@ -40,39 +41,34 @@ class ClientThread extends Thread {
 }
 
 public class Client {
-    static String FileName1 = "Matrices/1.dat";
-    static String FileName2 = "Matrices/2.dat";
+    static String FileName1 = "Matrices/A.dat";
+    static String FileName2 = "Matrices/B.dat";
     public static void main(String[] args) throws IOException{
         String FileNameOfResult = "Matrices/Result.txt";
-        //int serversNumber = 4;
-        String M1 = "";
-        try (FileInputStream f1 = new FileInputStream(FileName1)){
-            int i = 0;
-            do {
-                i = f1.read();
-                if (i!=-1) M1 += (char)i;
-            } while (i!=-1);
-        } catch (Exception e) {
-            System.err.println(e);
-            return;
+        int l, n, m;
+        String[] M1, M2;
+        try (Scanner sc = new Scanner(new File(FileName1))) {
+        	l = sc.nextInt();
+        	n = sc.nextInt();
+        	M1 = new String[l];
+        	for (int i=0; i<l; ++i) {
+        		M1[i]="";
+        		for (int j=0; j<n; ++j) {
+        			M1[i]+=sc.next() + " ";
+        		}
+        	}
         }
-        String M2 = "";
-        try (FileInputStream f1 = new FileInputStream(FileName2)) {
-            int i = 0;
-            do {
-                i = f1.read();
-                if (i!=-1 & (char)i != '\n') M2 += (char)i;
-            } while (i!=-1);
-        } catch (Exception e) {
-            System.err.println(e);
-            return;
+        try (Scanner sc = new Scanner(new File(FileName2))) {
+        	n = sc.nextInt();
+        	m = sc.nextInt();
+        	M2 = new String[n];
+        	for (int i=0; i<n; ++i) {
+        		M2[i]="";
+        		for (int j=0; j<m; ++j) {
+        			M2[i]+=sc.next() + " ";
+        		}
+        	}
         }
-        String[] M1Rows = M1.split("\n");
-        String[] M1Dimensions = M1Rows[0].split(" ", 3);
-        int l = Integer.parseInt(M1Dimensions[0]);
-        int n = Integer.parseInt(M1Dimensions[1]);
-        String[] M2Numbers = M2.split(" ", 3);
-        int m = Integer.parseInt(M2Numbers[1]);
         int[][] Result = new int[l][m];
         //InetAddress[] servers = {InetAddress.getByName("223.0.0.1"), InetAddress.getByName("223.0.0.2"), InetAddress.getByName("223.0.0.3"), InetAddress.getByName("223.0.0.4")};
         int serversNumber = 1;
@@ -94,30 +90,18 @@ public class Client {
             out.close();
             in.close();
             clientNode.close();
-
         } catch (Exception e) {
             System.err.println("Could not receive data\n" + e);
         }
-        int remainder = l % serversNumber;
-        int currentRow = 1;
-        int currentResultRow = 0;
         int [] rowsNumber = new int[serversNumber];
-        ClientThread[] Threads = new ClientThread[serversNumber];
         Instant start = Instant.now();
-        for (int i=0; i<serversNumber; i++) {
-            rowsNumber[i] = l / serversNumber;
-            if (remainder > 0) {
-                rowsNumber[i]++;
-                remainder--;
-            }
-            String MCurrent = "";
-            for (int j = 0; j<rowsNumber[i]; j++, currentRow++) {
-                MCurrent +=M1Rows[currentRow];
-            }
-            String Request = rowsNumber[i] + " " + n + " " + MCurrent + M2 + "\n";
-            Threads[i] = new ClientThread(servers[i], Request);
+        String[] Request = Distribute(serversNumber, m, M1, M2);
+        int cThr = Request.length;
+        ClientThread[] Threads = new ClientThread[cThr];
+        for (int i=0; i<cThr; ++i) {
+        	Threads[i] = new ClientThread(servers[i], Request[i] + "\n");
         }
-        for (int i = 0; i<serversNumber; i++) {
+        for (int i = 0; i<cThr; i++) {
             try {
                 Threads[i].join();
             } catch (InterruptedException e) {
@@ -125,8 +109,9 @@ public class Client {
                 System.err.println(e);
             }
         }
-        String Times[] = new String[serversNumber];
-        for (int i=0; i <serversNumber; i++) {
+        String Times[] = new String[cThr];
+        int currentResultRow = 0;
+        for (int i=0; i <cThr; i++) {
             String[] AnswerNumbers = Threads[i].getAnswer().split(" ");
             int currentNumber = 0;
             for (int j=0; j<rowsNumber[i]; j++, currentResultRow++) {
@@ -145,7 +130,7 @@ public class Client {
         } catch (IOException e) {
           System.err.println(e);
         }
-        for (int i = 0; i<serversNumber; i++) {
+        for (int i = 0; i<cThr; i++) {
             try (FileWriter f = new FileWriter("log.txt", true); 
             BufferedWriter b = new BufferedWriter(f); 
             PrintWriter p = new PrintWriter(b);) {
@@ -186,8 +171,30 @@ public class Client {
             return;
         }
     }
-    public double add(double... operands) {
-        return java.util.stream.DoubleStream.of(operands)
-                .sum();
+    static String[] Distribute(int serversNumber, int m, String[] M1, String[] M2) {
+    	if (serversNumber > M1.length) {
+    		serversNumber = M1.length;
+    	}
+        int remainder = M1.length % serversNumber;
+        int currentRow = 0;
+        int [] rowsNumber = new int[serversNumber];
+        String [] Request = new String[serversNumber];
+        String M2s = "";
+        for (int i=0; i<M2.length; ++i) {
+        	M2s+=M2[i];
+        }
+        for (int i=0; i<serversNumber; ++i) {
+            rowsNumber[i] = M1.length  / serversNumber;
+            if (remainder > 0) {
+                ++rowsNumber[i];
+                --remainder;
+            }
+            String MCurrent = "";
+            for (int j = 0; j<rowsNumber[i]; j++, currentRow++) {
+                MCurrent += M1[currentRow];
+            }
+            Request[i] = rowsNumber[i] + " " + M2.length + " " + MCurrent + M2.length + " " + m + " " + M2s;
+        }
+        return Request;
     }
 }
