@@ -1,11 +1,17 @@
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.time.*;
+import java.util.Calendar;
 import java.util.Scanner;
 class ClientThread extends Thread {
     private InetAddress serverIP;
     private String Request;
     private String Answer;
+    private long transfer;
+    private long multiplication;
     private long elapsed;
 
     public ClientThread(InetAddress serverIP, String Request) {
@@ -19,6 +25,12 @@ class ClientThread extends Thread {
     public String getTime() {
         return serverIP.getHostAddress() + ": " + Long.toString(elapsed);
     }
+    public String getTransferTime() {
+        return serverIP.getHostAddress() + ": " + Long.toString(transfer);
+    }
+    public String getMultiplicationTime() {
+        return serverIP.getHostAddress() + ": " + Long.toString(multiplication);
+    }
     @Override
     public void run() {
         try {
@@ -29,9 +41,11 @@ class ClientThread extends Thread {
             out.write(Request);
             out.flush();
             Answer = in.readLine();
-            out.close();
             Instant Finish = Instant.now();
+            multiplication = Long.parseLong(in.readLine());
+            out.close();
             elapsed = Duration.between(Start, Finish).toMillis();
+            transfer = elapsed-multiplication;
             in.close();
             clientNode.close(); 
         } catch (IOException e) {
@@ -43,10 +57,13 @@ class ClientThread extends Thread {
 public class Client {
     static String FileName1 = "Matrices/A.dat";
     static String FileName2 = "Matrices/B.dat";
+    static int useNs = -1;
     public static void main(String[] args) throws IOException{
         String FileNameOfResult = "Matrices/Result.txt";
         int l, n, m;
         String[] M1, M2;
+        SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+        SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
         try (Scanner sc = new Scanner(new File(FileName1))) {
         	l = sc.nextInt();
         	n = sc.nextInt();
@@ -93,6 +110,9 @@ public class Client {
         } catch (Exception e) {
             System.err.println("Could not receive data\n" + e);
         }
+        if (useNs!=-1) {
+        	serversNumber = useNs;
+        }
         int [] rowsNumber = new int[serversNumber];
         Instant start = Instant.now();
         String[] Request = Distribute(serversNumber, m, M1, M2);
@@ -110,6 +130,8 @@ public class Client {
             }
         }
         String Times[] = new String[cThr];
+        String TrTimes[] = new String[cThr];
+        String MTimes[] = new String[cThr];
         int currentResultRow = 0;
         for (int i=0; i <cThr; i++) {
             String[] AnswerNumbers = Threads[i].getAnswer().split(" ");
@@ -120,21 +142,25 @@ public class Client {
                 }
             }
             Times[i] = Threads[i].getTime();
+            TrTimes[i] = Threads[i].getTransferTime();
+            MTimes[i] = Threads[i].getMultiplicationTime();
         }
         Instant finish = Instant.now();
         long elapsed = Duration.between(start, finish).toMillis();
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("Time: " + elapsed);
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" Time: " + elapsed);
         } catch (IOException e) {
           System.err.println(e);
         }
         for (int i = 0; i<cThr; i++) {
-            try (FileWriter f = new FileWriter("log.txt", true); 
+            try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
             BufferedWriter b = new BufferedWriter(f); 
             PrintWriter p = new PrintWriter(b);) {
-            p.println("Time of server " + Times[i]);
+            p.println(timeForm.format(Calendar.getInstance().getTime())+"\tTime of server " + Times[i]);
+            p.println(timeForm.format(Calendar.getInstance().getTime())+"\t\tTransportation time " + TrTimes[i]);
+            p.println(timeForm.format(Calendar.getInstance().getTime())+"\t\tMultiplication time " + MTimes[i]);
             } catch (IOException e) {
             System.err.println(e);
             }
@@ -159,10 +185,10 @@ public class Client {
                 }
                 f2.write('\n');
             }
-            try (FileWriter f = new FileWriter("log.txt", true); 
+            try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
             BufferedWriter b = new BufferedWriter(f); 
             PrintWriter p = new PrintWriter(b);) {
-            p.println("Writing is succeseful_0");
+            p.println(timeForm.format(Calendar.getInstance().getTime())+" Writing is succeseful");
             } catch (IOException e) {
             System.err.println(e);
             }

@@ -1,5 +1,8 @@
 import java.io.*;
 import java.net.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 import java.awt.*;
@@ -14,6 +17,8 @@ class ExplorerThread extends Thread {
   private List<Integer> Lifespan;
   private boolean active;
   private Window window;
+  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
   public ExplorerThread(int PORT, int LPORT, List<InetAddress> serverAddresses, List<Integer> Lifespan, boolean active, Window window) throws IOException {
     this.LPORT = LPORT;
     this.serverAddresses = serverAddresses;
@@ -32,10 +37,10 @@ class ExplorerThread extends Thread {
       for (int i=0; i < Lifespan.size(); i++) {
         Lifespan.set(i, Lifespan.get(i) - 1);
         if (Lifespan.get(i) == 0) {
-          try (FileWriter f = new FileWriter("log.txt", true); 
+          try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
           BufferedWriter b = new BufferedWriter(f); 
           PrintWriter p = new PrintWriter(b);) {
-            p.println(serverAddresses.get(i) + " Doesn't answer for too long");
+            p.println(timeForm.format(Calendar.getInstance().getTime())+" "+serverAddresses.get(i) + " Doesn't answer for too long");
           } catch (IOException e) {
             System.err.println(e);
           }
@@ -47,10 +52,10 @@ class ExplorerThread extends Thread {
       serverAddresses.removeIf(n->(n.equals(Broadcast)));
       window.repaint();
       if (deleted) {
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("Servers number is " + serverAddresses.size());
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + serverAddresses.size());
         } catch (IOException e) {
           System.err.println(e);
         }
@@ -82,6 +87,8 @@ class ListenerThread extends Thread {
   private List<InetAddress> serverAddresses;
   private List<Integer> Lifespan;
   private Window window;
+  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
   ListenerThread (int PORT, List<InetAddress> serverAddresses, List<Integer> Lifespan, Window window) throws IOException {
     this.serverAddresses = serverAddresses;
     this.Lifespan = Lifespan;
@@ -99,18 +106,18 @@ class ListenerThread extends Thread {
         InetAddress received = packet.getAddress();
         if (!serverAddresses.contains(received)) {
           serverAddresses.add(received);
-          Lifespan.add(5);
+          Lifespan.add(10);
           window.repaint();
-          try (FileWriter f = new FileWriter("log.txt", true); 
+          try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
           BufferedWriter b = new BufferedWriter(f); 
           PrintWriter p = new PrintWriter(b);) {
-            p.println("Got hello from " + received);
-            p.println("Servers number is " + serverAddresses.size());
+            p.println(timeForm.format(Calendar.getInstance().getTime())+" Got hello from " + received);
+            p.println(timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + serverAddresses.size());
           } catch (IOException e) {
             System.err.println(e);
           }
         } else {
-          Lifespan.set(serverAddresses.indexOf(received), 5);
+          Lifespan.set(serverAddresses.indexOf(received), 10);
         }
       } catch (IOException e){
         System.err.println("Failed to recive data");
@@ -124,6 +131,8 @@ class NewThread extends Thread {
   private BufferedReader in;
   private BufferedWriter out;
   List<InetAddress> serverAddresses;
+  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
   public NewThread(ServerSocket serverNode, List<InetAddress> serverAddresses) {
     this.serverAddresses = serverAddresses;
     try {
@@ -139,19 +148,19 @@ class NewThread extends Thread {
   @Override
   public void run() {
     try {
-      try (FileWriter f = new FileWriter("log.txt", true); 
+      try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
           BufferedWriter b = new BufferedWriter(f); 
           PrintWriter p = new PrintWriter(b);) {
-            p.println("Connection accepted: "+ clientNode);
+            p.println(timeForm.format(Calendar.getInstance().getTime())+" Connection accepted: "+ clientNode);
           } catch (IOException e) {
             System.err.println(e);
           }
       String[] M = in.readLine().split(" ");
       if (M[0].equals("GetData")) {
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
           BufferedWriter b = new BufferedWriter(f); 
           PrintWriter p = new PrintWriter(b);) {
-            p.println("Request to give data");
+            p.println(timeForm.format(Calendar.getInstance().getTime())+" Request to give data");
           } catch (IOException e) {
             System.err.println(e);
           }
@@ -162,10 +171,10 @@ class NewThread extends Thread {
           out.flush();
         }
       } else {
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("ReadLine() is succesfull: ");
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" ReadLine() is succesfull: ");
         } catch (IOException e) {
           System.err.println(e);
         }
@@ -188,14 +197,16 @@ class NewThread extends Thread {
         String newM=Multiply(M1, M2);
         Instant Finish = Instant.now();
         long multiplication = Duration.between(Start, Finish).toMillis();
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("Multiplication time on this server: " + Long.toString(multiplication));
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" Multiplication time on this server: " + Long.toString(multiplication));
         } catch (IOException e) {
           System.err.println(e);
         }
         out.write(newM + "\n");
+        out.flush();
+        out.write(multiplication + "\n");
         out.flush();
       }
     } catch(Exception e) {
@@ -239,9 +250,12 @@ class Window extends Frame implements ActionListener {
   boolean started = false;
   FileDialog fd1 = new FileDialog(this);
   FileDialog fd2 = new FileDialog(this);
+  TextField tf1;
   Button Matrix1;
   Button Matrix2;
   Button Mult;
+  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
   public Window() {
     setLayout(new FlowLayout());
     String str = "Выберите режим работы узла. \n" +
@@ -291,6 +305,8 @@ class Window extends Frame implements ActionListener {
       Matrix2.addActionListener(this);
       Mult.addActionListener(this);
       Mult.setEnabled(false);
+      tf1 = new TextField("0");
+      add(tf1);
       add(Matrix1);
       add(Matrix2);
       add(Mult);
@@ -303,19 +319,19 @@ class Window extends Frame implements ActionListener {
       Client.FileName1 = fd1.getDirectory()+fd1.getFile();
       if (fd1.getFile()!=null) {
         Matrix1.setLabel("Изменить первую матрицу");
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("File of the first matrix is " + fd1.getFile());
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" File of the first matrix is " + fd1.getFile());
         } catch (IOException e) {
           System.err.println(e);
         }
       } else {
         Matrix1.setLabel("Выбрать первую матрицу");
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("No file of the first matrix");
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" No file of the first matrix");
         } catch (IOException e) {
           System.err.println(e);
         }
@@ -329,19 +345,19 @@ class Window extends Frame implements ActionListener {
       Client.FileName2 = fd2.getDirectory()+fd2.getFile();
       if (fd2.getFile()!=null) {
         Matrix2.setLabel("Изменить вторую матрицу");
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("File of the second matrix is " + fd2.getFile());
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" File of the second matrix is " + fd2.getFile());
         } catch (IOException e) {
           System.err.println(e);
         }
       } else {
         Matrix2.setLabel("Выбрать вторую матрицу");
-        try (FileWriter f = new FileWriter("log.txt", true); 
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
         BufferedWriter b = new BufferedWriter(f); 
         PrintWriter p = new PrintWriter(b);) {
-          p.println("No file of the second matrix");
+          p.println(timeForm.format(Calendar.getInstance().getTime())+" No file of the second matrix");
         } catch (IOException e) {
           System.err.println(e);
         }
@@ -349,6 +365,7 @@ class Window extends Frame implements ActionListener {
       repaint();
     } else if (name.equals("Mult")) {
       try {
+    	Client.useNs = Integer.parseInt(tf1.getText());
         Client.main(null);
       } catch (IOException e) {
         System.err.println(e);
@@ -369,11 +386,14 @@ public class Server {
     static List <InetAddress> serverAddresses = new ArrayList<InetAddress>();
     static List <Integer> Lifespan = new ArrayList<Integer>();
     public static void main(String[] args) throws IOException{
+      SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+      SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
+      String log = Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt";
       ServerSocket serverNode = new ServerSocket(PORT);
-      try (FileWriter f = new FileWriter("log.txt", true); 
+      try (FileWriter f = new FileWriter(log, true); 
       BufferedWriter b = new BufferedWriter(f); 
       PrintWriter p = new PrintWriter(b);) {
-        p.println(serverNode);
+        p.println(timeForm.format(Calendar.getInstance().getTime())+" Program has started. "+serverNode);
       }
       Window Window = new Window();
       Window.setVisible(true);
