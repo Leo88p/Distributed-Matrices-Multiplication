@@ -5,11 +5,11 @@ public class Generator {
     public static void main(String[] args) {
         FileOutputStream f1;
         Random rnd = new Random();
-        int l = 400;
-        int n = 400;
-        int m = 400;
-        String FileName1 = "Matrices/400_400_A.dat";
-        String FileName2 = "Matrices/400_400_B.dat";
+        int l = 1000;
+        int n = 1000;
+        int m = 1000;
+        String FileName1 = "Matrices/1000_1000_A.dat";
+        String FileName2 = "Matrices/1000_1000_B.dat";
         try {
             f1 = new FileOutputStream(FileName1);
             System.out.println("FileStream is created");

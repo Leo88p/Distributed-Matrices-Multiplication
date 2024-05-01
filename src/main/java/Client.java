@@ -8,18 +8,20 @@ import java.util.Calendar;
 import java.util.Scanner;
 class ClientThread extends Thread {
     private InetAddress serverIP;
-    private String Request;
-    private String Answer;
+    private int[][] M1;
+    private int[][] M2;
+    private int[][] Answer;
     private long transfer;
     private long multiplication;
     private long elapsed;
 
-    public ClientThread(InetAddress serverIP, String Request) {
+    public ClientThread(InetAddress serverIP, int[][] M1, int[][] M2) {
         this.serverIP = serverIP;
-        this.Request = Request;
+        this.M1 = M1;
+        this.M2 = M2;
         start();
     }
-    public String getAnswer() {
+    public int[][] getAnswer() {
         return Answer;
     }
     public String getTime() {
@@ -33,23 +35,23 @@ class ClientThread extends Thread {
     }
     @Override
     public void run() {
+    	
         try {
-            Socket clientNode = new Socket(serverIP, Server.PORT);
-            BufferedReader in = new BufferedReader(new InputStreamReader(clientNode.getInputStream()));
-            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(clientNode.getOutputStream()));
+        	Socket clientNode = new Socket(serverIP, Server.PORT);
+    		ObjectInputStream in = new ObjectInputStream(clientNode.getInputStream());
+            ObjectOutputStream out = new ObjectOutputStream(clientNode.getOutputStream());
+        	out.flush();
             Instant Start = Instant.now();
-            out.write(Request);
-            out.flush();
-            Answer = in.readLine();
+            out.writeObject(M1);
+            out.writeObject(M2);
+            Answer = (int[][])in.readObject();
             Instant Finish = Instant.now();
-            multiplication = Long.parseLong(in.readLine());
-            out.close();
+            multiplication = in.readLong();
             elapsed = Duration.between(Start, Finish).toMillis();
             transfer = elapsed-multiplication;
-            in.close();
-            clientNode.close(); 
-        } catch (IOException e) {
-            System.err.println("Socket has crashed");
+            clientNode.close();
+        } catch (IOException | ClassNotFoundException e) {
+            System.out.println("Socket has crashed");
         }
     }
 }
@@ -60,66 +62,46 @@ public class Client {
     static int useNs = -1;
     public static void main(String[] args) throws IOException{
         String FileNameOfResult = "Matrices/Result.txt";
+        InetAddress[] servers =  Server.serverAddresses.toArray(new InetAddress[0]);
+        int serversNumber = servers.length;
         int l, n, m;
-        String[] M1, M2;
+        int[][] M1, M2;
         SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
         SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
         try (Scanner sc = new Scanner(new File(FileName1))) {
         	l = sc.nextInt();
         	n = sc.nextInt();
-        	M1 = new String[l];
+        	M1 = new int[l][n];
         	for (int i=0; i<l; ++i) {
-        		M1[i]="";
         		for (int j=0; j<n; ++j) {
-        			M1[i]+=sc.next() + " ";
+        			M1[i][j]=sc.nextInt();
         		}
         	}
         }
         try (Scanner sc = new Scanner(new File(FileName2))) {
         	n = sc.nextInt();
         	m = sc.nextInt();
-        	M2 = new String[n];
+        	M2 = new int[n][m];
         	for (int i=0; i<n; ++i) {
-        		M2[i]="";
         		for (int j=0; j<m; ++j) {
-        			M2[i]+=sc.next() + " ";
+        			M2[i][j]=sc.nextInt();
         		}
         	}
         }
         int[][] Result = new int[l][m];
         //InetAddress[] servers = {InetAddress.getByName("223.0.0.1"), InetAddress.getByName("223.0.0.2"), InetAddress.getByName("223.0.0.3"), InetAddress.getByName("223.0.0.4")};
-        int serversNumber = 1;
-        InetAddress[] servers = {InetAddress.getByName("223.0.0.1")};
-        Socket clientNode;
-        BufferedReader in;
-        BufferedWriter out;
-        try {
-            clientNode = new Socket(InetAddress.getLocalHost(), Server.PORT);
-            in = new BufferedReader(new InputStreamReader(clientNode.getInputStream()));
-            out = new BufferedWriter(new OutputStreamWriter(clientNode.getOutputStream()));
-            out.write("GetData\n");
-            out.flush();
-            serversNumber = Integer.parseInt(in.readLine());
-            servers = new InetAddress[serversNumber];
-            for (int i=0; i<serversNumber; i++) {
-                servers[i] = InetAddress.getByName(in.readLine());
-            }
-            out.close();
-            in.close();
-            clientNode.close();
-        } catch (Exception e) {
-            System.err.println("Could not receive data\n" + e);
-        }
+        //int serversNumber = 1;
+        //InetAddress[] servers = {InetAddress.getByName("223.0.0.1")};
         if (useNs!=-1) {
         	serversNumber = useNs;
         }
         int [] rowsNumber = new int[serversNumber];
         Instant start = Instant.now();
-        String[] Request = Distribute(serversNumber, m, M1, M2);
+        int[][][] Request = Distribute(serversNumber, M1, rowsNumber);
         int cThr = Request.length;
         ClientThread[] Threads = new ClientThread[cThr];
         for (int i=0; i<cThr; ++i) {
-        	Threads[i] = new ClientThread(servers[i], Request[i] + "\n");
+        	Threads[i] = new ClientThread(servers[i], Request[i], M2);
         }
         for (int i = 0; i<cThr; i++) {
             try {
@@ -134,11 +116,10 @@ public class Client {
         String MTimes[] = new String[cThr];
         int currentResultRow = 0;
         for (int i=0; i <cThr; i++) {
-            String[] AnswerNumbers = Threads[i].getAnswer().split(" ");
-            int currentNumber = 0;
-            for (int j=0; j<rowsNumber[i]; j++, currentResultRow++) {
-                for (int k=0; k<m; k++,currentNumber++) {
-                    Result[currentResultRow][k] = Integer.parseInt(AnswerNumbers[currentNumber]);
+            int[][] AnswerNumbers = Threads[i].getAnswer();
+            for (int j=0; j<rowsNumber[i]; ++j, ++currentResultRow) {
+                for (int k=0; k<m; k++) {
+                    Result[currentResultRow][k] = AnswerNumbers[j][k];
                 }
             }
             Times[i] = Threads[i].getTime();
@@ -197,29 +178,23 @@ public class Client {
             return;
         }
     }
-    static String[] Distribute(int serversNumber, int m, String[] M1, String[] M2) {
-    	if (serversNumber > M1.length) {
-    		serversNumber = M1.length;
+    static int[][][] Distribute(int serversNumber, int[][] M, int[] rowsNumber) {
+    	if (serversNumber > M.length) {
+    		serversNumber = M.length;
     	}
-        int remainder = M1.length % serversNumber;
+        int remainder = M.length % serversNumber;
         int currentRow = 0;
-        int [] rowsNumber = new int[serversNumber];
-        String [] Request = new String[serversNumber];
-        String M2s = "";
-        for (int i=0; i<M2.length; ++i) {
-        	M2s+=M2[i];
-        }
+        int[][][] Request = new int[serversNumber][][];
         for (int i=0; i<serversNumber; ++i) {
-            rowsNumber[i] = M1.length  / serversNumber;
+            rowsNumber[i] = M.length  / serversNumber;
             if (remainder > 0) {
                 ++rowsNumber[i];
                 --remainder;
             }
-            String MCurrent = "";
-            for (int j = 0; j<rowsNumber[i]; j++, currentRow++) {
-                MCurrent += M1[currentRow];
+            Request[i] = new int[rowsNumber[i]][];
+            for (int j=0; j<rowsNumber[i]; ++j, ++currentRow) {
+            	Request[i][j] = M[currentRow];
             }
-            Request[i] = rowsNumber[i] + " " + M2.length + " " + MCurrent + M2.length + " " + m + " " + M2s;
         }
         return Request;
     }

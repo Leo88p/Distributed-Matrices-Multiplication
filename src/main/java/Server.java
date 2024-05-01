@@ -126,119 +126,73 @@ class ListenerThread extends Thread {
   }
 }
 
-class NewThread extends Thread {
+class MultiplicationThread extends Thread {
   private Socket clientNode;
-  private BufferedReader in;
-  private BufferedWriter out;
   List<InetAddress> serverAddresses;
   SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
   SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
-  public NewThread(ServerSocket serverNode, List<InetAddress> serverAddresses) {
+  public MultiplicationThread(ServerSocket serverNode, List<InetAddress> serverAddresses) {
     this.serverAddresses = serverAddresses;
     try {
       clientNode = serverNode.accept();
-      in = new BufferedReader(new InputStreamReader(clientNode.getInputStream()));
-      out = new BufferedWriter(new OutputStreamWriter(clientNode.getOutputStream()));
     } catch (IOException e) {
       System.err.println("Failed to create sockets");
     } finally {
-      start();
+    	start();
     }
   }
   @Override
   public void run() {
     try {
-      try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+    	ObjectOutputStream out = new ObjectOutputStream(clientNode.getOutputStream());
+    	ObjectInputStream in = new ObjectInputStream(clientNode.getInputStream());
+    	try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
           BufferedWriter b = new BufferedWriter(f); 
           PrintWriter p = new PrintWriter(b);) {
             p.println(timeForm.format(Calendar.getInstance().getTime())+" Connection accepted: "+ clientNode);
-          } catch (IOException e) {
+    	} catch (IOException e) {
             System.err.println(e);
-          }
-      String[] M = in.readLine().split(" ");
-      if (M[0].equals("GetData")) {
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-          BufferedWriter b = new BufferedWriter(f); 
-          PrintWriter p = new PrintWriter(b);) {
-            p.println(timeForm.format(Calendar.getInstance().getTime())+" Request to give data");
-          } catch (IOException e) {
-            System.err.println(e);
-          }
-        out.write(Integer.toString(serverAddresses.size()) + '\n');
-        out.flush();
-        for (InetAddress server: serverAddresses) {
-          out.write(server.getHostAddress() + '\n');
-          out.flush();
-        }
-      } else {
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" ReadLine() is succesfull: ");
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-        Instant Start = Instant.now();
-        int l = Integer.parseInt(M[0]);
-        int n = Integer.parseInt(M[1]);
-        int m = Integer.parseInt(M[l*n+3]);
-        int[][] M1 = new int[l][n];
-        for (int i=0; i < l; i++) {
-          for (int j=0; j<n; j++) {
-            M1[i][j]=Integer.parseInt(M[2+i*n+j]);
-          }
-        }
-        int[][] M2 = new int[n][m];
-        for (int i=0; i < n; i++) {
-          for (int j=0; j<m; j++) {
-            M2[i][j]=Integer.parseInt(M[l*n+4+i*m+j]);
-          }
-        }
-        String newM=Multiply(M1, M2);
-        Instant Finish = Instant.now();
-        long multiplication = Duration.between(Start, Finish).toMillis();
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" Multiplication time on this server: " + Long.toString(multiplication));
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-        out.write(newM + "\n");
-        out.flush();
-        out.write(multiplication + "\n");
-        out.flush();
-      }
+    	}
+    	int[][] M1 = (int[][])in.readObject();
+    	int[][] M2 = (int[][])in.readObject();
+	    try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+	    BufferedWriter b = new BufferedWriter(f); 
+	    PrintWriter p = new PrintWriter(b);) {
+	      p.println(timeForm.format(Calendar.getInstance().getTime())+" ReadLine() is succesfull: ");
+	    } catch (IOException e) {
+	      System.err.println(e);
+	    }
+	    Instant Start = Instant.now();  
+	    int[][] newM=Multiply(M1, M2);
+	    Instant Finish = Instant.now();
+	    long multiplication = Duration.between(Start, Finish).toMillis();
+	    try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+	    BufferedWriter b = new BufferedWriter(f); 
+	    PrintWriter p = new PrintWriter(b);) {
+	      p.println(timeForm.format(Calendar.getInstance().getTime())+" Multiplication time on this server: " + Long.toString(multiplication));
+	    } catch (IOException e) {
+	      System.err.println(e);
+	    }
+	    out.writeObject(newM);
+	    out.writeLong(multiplication);
+	    out.close();
+	    in.close();
+	    clientNode.close();
     } catch(Exception e) {
-      System.err.println("Error has occured");
-      try {
-        out.write("Error\n");
-        out.flush();
-      } catch (IOException err) {
-        System.err.println("Failed to report error");
-      }
-    } finally {
-      try {
-        in.close();
-        out.close();
-        clientNode.close();
-      } catch (IOException e) {
-        System.err.println("Failed to close");
-      }
-    }
+    	System.err.println("Error has occured"); 
+    	}
   }
-  public static String Multiply (int[][] M1, int[][] M2) {
-  	String Result ="";
-    for (int i=0; i<M1.length; i++) {
-        for (int j=0; j<M2[0].length; j++) {
-          int temp = 0;
-          for (int k=0; k<M2.length; k++) {
-            temp+=M1[i][k]*M2[k][j];
-          }
-          Result+=temp+" ";
-        }
-      }
-  	return Result;
+  public static int[][] Multiply (int[][] M1, int[][] M2) {
+	  	int[][] Result =new int[M1.length][M2[0].length];
+	    for (int i=0; i<M1.length; ++i) {
+	        for (int j=0; j<M2[0].length; ++j) {
+	          Result[i][j]=0;
+	          for (int k=0; k<M2.length; ++k) {
+	            Result[i][j]+=M1[i][k]*M2[k][j];
+	          }
+	        }
+	      }
+	  	return Result;
   }
 }
 class Window extends Frame implements ActionListener {
@@ -305,7 +259,7 @@ class Window extends Frame implements ActionListener {
       Matrix2.addActionListener(this);
       Mult.addActionListener(this);
       Mult.setEnabled(false);
-      tf1 = new TextField("0");
+      tf1 = new TextField("1");
       add(tf1);
       add(Matrix1);
       add(Matrix2);
@@ -398,7 +352,7 @@ public class Server {
       Window Window = new Window();
       Window.setVisible(true);
       while (true) {
-        new NewThread(serverNode, serverAddresses);
+        new MultiplicationThread(serverNode, serverAddresses);
       }
     }
 }

@@ -1,4 +1,4 @@
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import java.io.File;
 import java.io.IOException;
 import java.util.Scanner;
@@ -36,16 +36,17 @@ public class MultiplicationTest {
         		}
         	}
     	}
-    	String Result="";
+    	int[][] Result;
     	try (Scanner sc = new Scanner(new File(classLoader.getResource(FileNameC).getFile()))) {
         	int l = sc.nextInt();
         	int m = sc.nextInt();
+        	Result = new int[l][m];
         	for (int i=0; i<l; ++i) {
         		for (int j=0; j<m; ++j) {
-        			Result += sc.nextInt() + " ";
+        			Result[i][j] = sc.nextInt();
         		}
         	}
     	}
-    	assertEquals(Result, NewThread.Multiply(M1, M2));
+    	assertArrayEquals(Result, MultiplicationThread.Multiply(M1, M2));
     }
 }
