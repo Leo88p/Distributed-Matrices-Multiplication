@@ -1,12 +1,37 @@
 import java.io.*;
+import java.lang.reflect.Array;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
+
+import javax.imageio.ImageIO;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JPanel;
+import javax.swing.JRadioButton;
+import javax.swing.JTextArea;
+import javax.swing.JToolBar;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.border.LineBorder;
+
+import org.apache.batik.swing.JSVGCanvas;
+
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BaseMultiResolutionImage;
+import java.awt.image.BufferedImage;
 import java.time.*;
 
 class ExplorerThread extends Thread {
@@ -195,11 +220,153 @@ class MultiplicationThread extends Thread {
 	  	return Result;
   }
 }
-class Window extends Frame implements ActionListener {
-  private static final long serialVersionUID = -71397683808689083L;
-  Checkbox active, passive;
+class MainWindow extends JFrame {
+	private static final long serialVersionUID = 5975871377366251408L;
+	private boolean Active = true;
+	private boolean Running = false;
+	private JButton JBMode = new JButton();
+	private JButton JBRun = new JButton();
+	private ImageIcon ImgAntOn;
+	private ImageIcon ImgAntOff;
+	private ImageIcon ImgStop;
+	private ImageIcon ImgStart;
+	public MainWindow() {
+		super("Распределённое умножение матриц");
+		try {
+			ImgAntOn = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_on_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("antenna_on_125.svg"))));
+			ImgAntOff = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_off_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("antenna_off_125.svg"))));
+			ImgStop = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("stop_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("stop_125.svg"))));
+			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("start_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("start_125.svg"))));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		setDefaultCloseOperation(EXIT_ON_CLOSE);
+		setExtendedState(JFrame.MAXIMIZED_BOTH); 
+		JToolBar JTools = new JToolBar();
+		JTools.setFloatable(false);
+		JTools.addSeparator();
+		JBMode.setIcon(ImgAntOn);
+		JBMode.setFocusPainted(false); 
+		JBMode.setToolTipText("Изменить режим работы узла");
+		JBMode.addActionListener(new JBModeActionL());
+		JTools.add(JBMode);
+		JTools.addSeparator();
+		JBRun.setIcon(ImgStart);
+		JBRun.setFocusPainted(false); 
+		JBRun.setToolTipText("Запустить сервер");
+		JBRun.addActionListener(new JBRunActionL());
+		JTools.add(JBRun);
+		add(JTools, "North");
+		setVisible(true);
+	    SwingUtilities.invokeLater ( new Runnable() {
+	    	public void run() {new DialogMode();}
+	    }
+	    );
+	}
+	class JBModeActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+		    SwingUtilities.invokeLater ( new Runnable() {
+		    	public void run() {new DialogMode();}
+		    }
+		    );
+		}
+	}
+	class JBRunActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+		    if (Running) {
+				JBRun.setIcon(ImgStart);
+				JBRun.setToolTipText("Запустить сервер");
+		    } else {
+				JBRun.setIcon(ImgStop);
+				JBRun.setToolTipText("Остановить сервер");
+		    }
+		    Running = !Running;
+		    JBMode.setEnabled(!JBMode.isEnabled());
+		}
+	}
+	class DialogMode extends JDialog {
+		private static final long serialVersionUID = 1823515078827607563L;
+		private ButtonGroup BGmode;
+		public DialogMode() {
+			super(MainWindow.this, "DialogMode");
+			setTitle("Режим работы узла");
+			setResizable(false); 
+			setModal(true);
+			
+			JPanel JPMain = new JPanel();
+			JPMain.setLayout(new BoxLayout(JPMain, BoxLayout.Y_AXIS));
+			JPMain.setBackground(Color.WHITE);
+			
+			JTextArea JLmessage = new JTextArea("Выберите режим работы узла. \nВ пассивном режиме узел не сообщает о своём присутствии в сети и не учавствует в перемножении матриц.", 4, 25);
+			JLmessage.setLineWrap(true);
+			JLmessage.setWrapStyleWord(true);
+			JLmessage.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+			JLmessage.setForeground(new Color(60,90,170));
+			JPanel JPmessage = new JPanel();
+			JPmessage.add(Box.createHorizontalStrut(10));
+			JPmessage.add(JLmessage);
+			JPmessage.add(Box.createHorizontalStrut(10));
+			JPmessage.setOpaque(false);
+			JPMain.add(Box.createVerticalStrut(5));
+			JPMain.add(JPmessage);
+			JPMain.add(Box.createVerticalStrut(5));
+			
+			JRadioButton JRBactive = new JRadioButton("активный");
+			JRBactive.setActionCommand("активный");
+			JRBactive.setOpaque(false);
+			JRadioButton JRBpassive = new JRadioButton("пассивный");
+			JRBpassive.setActionCommand("пассивный");
+			JRBpassive.setOpaque(false);
+			if (Active)
+				JRBactive.setSelected(true);
+			else 
+				JRBpassive.setSelected(true);
+			BGmode = new ButtonGroup();
+			BGmode.add(JRBactive);
+			BGmode.add(JRBpassive);
+			JPanel JPGroup = new JPanel();
+			JPGroup.setLayout(new BoxLayout(JPGroup, BoxLayout.X_AXIS));
+			JPGroup.add(JRBactive);
+			JPGroup.add(JRBpassive);
+			JPGroup.setAlignmentX(CENTER_ALIGNMENT);
+			JPGroup.setOpaque(false);
+			JPMain.add(JPGroup);
+			JPMain.add(Box.createVerticalStrut(5));
+			
+			JPanel JPOk = new JPanel();
+			JPOk.setLayout(new BoxLayout(JPOk, BoxLayout.Y_AXIS));
+			JPOk.add(Box.createVerticalStrut(10));
+			JButton JBOk = new JButton("OK");
+			JBOk.setAlignmentX(CENTER_ALIGNMENT);
+			JBOk.addActionListener(new JBOkActionL());
+			JPOk.add(JBOk);
+			JPOk.add(Box.createVerticalStrut(10));
+			JPMain.add(JPOk);
+			
+			add(JPMain);
+			
+			pack();
+			setLocation((Toolkit.getDefaultToolkit().getScreenSize().width)/2 - getWidth()/2, (Toolkit.getDefaultToolkit().getScreenSize().height)/2 - getHeight()/2);
+			setVisible(true);
+		}
+		class JBOkActionL implements ActionListener {
+			public void actionPerformed(ActionEvent ae) {
+				Active = BGmode.getSelection().getActionCommand().equals("активный");
+				JBMode.setIcon(Active?ImgAntOn:ImgAntOff);
+				dispose();
+			}
+		}
+	}
+}
+/* class WindowMode {
+  JRadioButton active, passive;
+  ButtonGroup mode;
   Button OK;
-  CheckboxGroup mode;
   TextArea text;
   boolean started = false;
   FileDialog fd1 = new FileDialog(this);
@@ -332,7 +499,7 @@ class Window extends Frame implements ActionListener {
       Mult.setEnabled(true);
     }
   }
-}
+} */
 public class Server {
     static int PORT = 9999;
     static int ListenerPORT = 9998;
@@ -349,8 +516,10 @@ public class Server {
       PrintWriter p = new PrintWriter(b);) {
         p.println(timeForm.format(Calendar.getInstance().getTime())+" Program has started. "+serverNode);
       }
-      Window Window = new Window();
-      Window.setVisible(true);
+      SwingUtilities.invokeLater ( new Runnable() {
+    	  public void run() {new MainWindow();}
+      }  
+      );
       while (true) {
         new MultiplicationThread(serverNode, serverAddresses);
       }
