@@ -8,11 +8,14 @@ import java.util.*;
 import java.util.List;
 
 import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -226,23 +229,40 @@ class MainWindow extends JFrame {
 	private boolean Running = false;
 	private JButton JBMode = new JButton();
 	private JButton JBRun = new JButton();
+	private JButton JBEther = new JButton();
 	private ImageIcon ImgAntOn;
+	private ImageIcon ImgAntOnDis;
 	private ImageIcon ImgAntOff;
+	private ImageIcon ImgAntOffDis;
 	private ImageIcon ImgStop;
 	private ImageIcon ImgStart;
+	private ImageIcon ImgEther;
+	private ImageIcon ImgEtherDis;
+	private int selectedNetworkInterface=0;
+	private int selectedIPnumber = 0;
+	private InetAddress selectedIP;
 	public MainWindow() {
 		super("Распределённое умножение матриц");
 		try {
 			ImgAntOn = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_on_100.svg")), 
 					ImageIO.read(MainWindow.class.getResource("antenna_on_125.svg"))));
+			ImgAntOnDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_on_disabled_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("antenna_on_disabled_125.svg"))));
 			ImgAntOff = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_off_100.svg")), 
 					ImageIO.read(MainWindow.class.getResource("antenna_off_125.svg"))));
+			ImgAntOffDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_off_disabled_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("antenna_off_disabled_125.svg"))));
 			ImgStop = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("stop_100.svg")), 
 					ImageIO.read(MainWindow.class.getResource("stop_125.svg"))));
 			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("start_100.svg")), 
 					ImageIO.read(MainWindow.class.getResource("start_125.svg"))));
+			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("start_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("start_125.svg"))));
+			ImgEther = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("ethernet_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("ethernet_125.svg"))));
+			ImgEtherDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("ethernet_disabled_100.svg")), 
+					ImageIO.read(MainWindow.class.getResource("ethernet_disabled_125.svg"))));
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -251,22 +271,64 @@ class MainWindow extends JFrame {
 		JTools.setFloatable(false);
 		JTools.addSeparator();
 		JBMode.setIcon(ImgAntOn);
+		JBMode.setDisabledIcon(ImgAntOnDis);
 		JBMode.setFocusPainted(false); 
 		JBMode.setToolTipText("Изменить режим работы узла");
 		JBMode.addActionListener(new JBModeActionL());
 		JTools.add(JBMode);
 		JTools.addSeparator();
+		
+		JBEther.setIcon(ImgEther);
+		JBEther.setDisabledIcon(ImgEtherDis);
+		JBEther.setFocusPainted(false); 
+		JBEther.setToolTipText("Изменить адаптер");
+		JBEther.addActionListener(new JBEtherActionL());
+		JTools.add(JBEther);
+		JTools.addSeparator();
+		
 		JBRun.setIcon(ImgStart);
 		JBRun.setFocusPainted(false); 
 		JBRun.setToolTipText("Запустить сервер");
 		JBRun.addActionListener(new JBRunActionL());
 		JTools.add(JBRun);
-		add(JTools, "North");
+		add(JTools, BorderLayout.NORTH);
+		
+		JPanel JStatusBar = new JPanel();
+		JStatusBar.setLayout(new BorderLayout());
+		JStatusBar.setBackground(new Color(230,230,230));
+		JButton JBServersNumber = new JButton("Количество активных серверов: " + Server.serverAddresses.size());
+		JBServersNumber.setBorderPainted(false);
+		JBServersNumber.setFocusPainted(false);
+		JBServersNumber.setBackground(new Color(230,230,230));
+		JBServersNumber.addMouseListener(new JBserversNumberMouseL());
+		JStatusBar.add(JBServersNumber, BorderLayout.WEST);
+		add(JStatusBar, BorderLayout.SOUTH);
+		
 		setVisible(true);
+		setMinimumSize(new Dimension(500,500));
 	    SwingUtilities.invokeLater ( new Runnable() {
 	    	public void run() {new DialogMode();}
 	    }
 	    );
+	}
+	class JBserversNumberMouseL implements MouseListener {
+		public void mouseClicked(MouseEvent e) {}
+		public void mousePressed(MouseEvent e) {}
+		public void mouseReleased(MouseEvent e) {}
+		public void mouseEntered(MouseEvent e) {
+			((JButton)e.getSource()).setBackground(new Color(220,220,220));
+		}
+		public void mouseExited(MouseEvent e) {
+			((JButton)e.getSource()).setBackground(new Color(230,230,230));
+		}
+	}
+	class JBEtherActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+		    SwingUtilities.invokeLater ( new Runnable() {
+		    	public void run() {new DialogIP();}
+		    }
+		    );
+		}
 	}
 	class JBModeActionL implements ActionListener {
 		public void actionPerformed(ActionEvent ae) {
@@ -287,14 +349,128 @@ class MainWindow extends JFrame {
 		    }
 		    Running = !Running;
 		    JBMode.setEnabled(!JBMode.isEnabled());
+		    JBEther.setEnabled(!JBEther.isEnabled());
+		}
+	}
+	class DialogIP extends JDialog {
+		private static final long serialVersionUID = -4826144205570259432L;
+		private ArrayList<String> NetList = new ArrayList<String>();
+		private ArrayList<ArrayList<String>> addrList = new ArrayList<ArrayList<String>>();
+		private ArrayList<ArrayList<InetAddress>> Addresses = new ArrayList<ArrayList<InetAddress>>();
+		private JComboBox<String> JCNet = new JComboBox<String>();
+		private JComboBox<String> JCIP = new JComboBox<>();
+		public DialogIP() {
+			super(MainWindow.this, "Выбор адаптера");
+			setResizable(false); 
+			setModal(true);
+			
+			try {
+				for(Enumeration<NetworkInterface> eni = NetworkInterface.getNetworkInterfaces(); eni.hasMoreElements(); ) {
+					NetworkInterface ifc = eni.nextElement();
+					if(ifc.isUp() && !ifc.isLoopback()) {
+						NetList.add(ifc.getDisplayName());
+						addrList.add(new ArrayList<String>());
+						Addresses.add(new ArrayList<InetAddress>());
+						for(InterfaceAddress ena : ifc.getInterfaceAddresses()) {
+							if ( ena.getAddress() instanceof Inet4Address) {
+								addrList.get(addrList.size()-1).add(ena.getAddress().getHostAddress()+"/"+ena.getNetworkPrefixLength());
+								Addresses.get(addrList.size()-1).add(ena.getAddress());
+							}
+						}
+					}
+				}
+			} catch (SocketException e) {
+				e.printStackTrace();
+			}
+			
+			JPanel JPDialog = new JPanel();
+			JPDialog.setLayout(new BoxLayout(JPDialog, BoxLayout.Y_AXIS));
+			JPDialog.setBackground(Color.WHITE);
+			
+			JPDialog.add(Box.createVerticalStrut(5));
+			JPanel JPText = new JPanel();
+			JPText.setOpaque(false);
+			JLabel JLText = new JLabel("Выберите адаптер и IP-адрес.");
+			JLText.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+			JLText.setForeground(new Color(60,90,170));
+			JPText.add(JLText);
+			JPDialog.add(JPText);
+			JPDialog.add(Box.createVerticalStrut(5));
+			
+			JPanel JPMain = new JPanel();
+			JPMain.setLayout(new BoxLayout(JPMain, BoxLayout.X_AXIS));
+			JPMain.setOpaque(false);
+			
+			JPMain.add(Box.createHorizontalStrut(10));
+			JPanel JPLabels = new JPanel();
+			JPLabels.setLayout(new BoxLayout(JPLabels, BoxLayout.Y_AXIS));
+			JPLabels.setOpaque(false);
+			JLabel JLNet = new JLabel("Адаптер:");
+			JPLabels.add(JLNet);
+			JPLabels.add(Box.createVerticalStrut(10));
+			JLabel JLIP = new JLabel("IP-адрес:");
+			JPLabels.add(JLIP);
+			JPMain.add(JPLabels);
+			JPMain.add(Box.createHorizontalStrut(5));
+			
+			JPanel JPCombox = new JPanel();
+			JPCombox.setLayout(new BoxLayout(JPCombox, BoxLayout.Y_AXIS));
+			JPCombox.setOpaque(false);
+			JCNet = new JComboBox<>(NetList.toArray(new String[0]));
+			JCNet.setSelectedIndex(selectedNetworkInterface);
+			JCNet.addActionListener(new JCNetActionL());
+			JPCombox.add(JCNet);
+			JPCombox.add(Box.createVerticalStrut(5));
+			JCIP = new JComboBox<>(addrList.get(selectedNetworkInterface).toArray(new String[0]));
+			JCIP.setSelectedIndex(selectedIPnumber);
+			selectedIP = Addresses.get(selectedNetworkInterface).get(selectedIPnumber);
+			JCIP.addActionListener(new JCIPActionL());
+			JPCombox.add(JCIP, BorderLayout.EAST);
+			JPMain.add(JPCombox);
+			JPMain.add(Box.createHorizontalStrut(10));
+			JPDialog.add(JPMain);
+			JPDialog.add(Box.createVerticalStrut(10));
+			
+			JPanel JPOk = new JPanel();
+			JPOk.setLayout(new BoxLayout(JPOk, BoxLayout.Y_AXIS));
+			JPOk.add(Box.createVerticalStrut(10));
+			JButton JBOk = new JButton("OK");
+			JBOk.setAlignmentX(CENTER_ALIGNMENT);
+			JBOk.addActionListener(new JBOkActionL());
+			JPOk.add(JBOk);
+			JPOk.add(Box.createVerticalStrut(10));
+			JPDialog.add(JPOk);
+			
+			add(JPDialog);
+			
+			pack();
+			setLocation((Toolkit.getDefaultToolkit().getScreenSize().width)/2 - getWidth()/2, (Toolkit.getDefaultToolkit().getScreenSize().height)/2 - getHeight()/2);
+			setVisible(true);
+		}
+		class JCNetActionL implements ActionListener {
+			public void actionPerformed(ActionEvent ae) {
+				selectedNetworkInterface=JCNet.getSelectedIndex();
+				DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>(addrList.get(selectedNetworkInterface).toArray(new String[0]));
+				JCIP.setModel(model);
+			}
+		}
+		class JCIPActionL implements ActionListener {
+			public void actionPerformed(ActionEvent ae) {
+				selectedIPnumber=JCIP.getSelectedIndex();
+				selectedIP=Addresses.get(selectedNetworkInterface).get(selectedIPnumber);
+			}
+		}
+		class JBOkActionL implements ActionListener {
+			public void actionPerformed(ActionEvent ae) {
+				dispose();
+			}
 		}
 	}
 	class DialogMode extends JDialog {
 		private static final long serialVersionUID = 1823515078827607563L;
 		private ButtonGroup BGmode;
 		public DialogMode() {
-			super(MainWindow.this, "DialogMode");
-			setTitle("Режим работы узла");
+			super(MainWindow.this, "Режим работы узла");
 			setResizable(false); 
 			setModal(true);
 			
@@ -358,6 +534,7 @@ class MainWindow extends JFrame {
 			public void actionPerformed(ActionEvent ae) {
 				Active = BGmode.getSelection().getActionCommand().equals("активный");
 				JBMode.setIcon(Active?ImgAntOn:ImgAntOff);
+				JBMode.setDisabledIcon(Active?ImgAntOnDis:ImgAntOffDis);
 				dispose();
 			}
 		}
