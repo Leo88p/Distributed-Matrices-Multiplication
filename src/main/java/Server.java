@@ -1,6 +1,7 @@
 import java.io.*;
 import java.lang.reflect.Array;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
@@ -37,130 +38,11 @@ import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
 import java.time.*;
 
-class ExplorerThread extends Thread {
-  private DatagramSocket ExplorerSocket;
-  private int LPORT;
-  private InetAddress Broadcast;
-  private List<InetAddress> serverAddresses;
-  private List<Integer> Lifespan;
-  private boolean active;
-  private Window window;
-  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
-  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
-  public ExplorerThread(int PORT, int LPORT, List<InetAddress> serverAddresses, List<Integer> Lifespan, boolean active, Window window) throws IOException {
-    this.LPORT = LPORT;
-    this.serverAddresses = serverAddresses;
-    this.Lifespan = Lifespan;
-    this.active = active;
-    this.window = window;
-    Broadcast = InetAddress.getByName("255.255.255.255");
-    ExplorerSocket = new DatagramSocket(PORT);
-    ExplorerSocket.setBroadcast(true);
-    start();
-  }
-  @Override
-  public void run() {
-    while (true) {
-      boolean deleted = false;
-      for (int i=0; i < Lifespan.size(); i++) {
-        Lifespan.set(i, Lifespan.get(i) - 1);
-        if (Lifespan.get(i) == 0) {
-          try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-          BufferedWriter b = new BufferedWriter(f); 
-          PrintWriter p = new PrintWriter(b);) {
-            p.println(timeForm.format(Calendar.getInstance().getTime())+" "+serverAddresses.get(i) + " Doesn't answer for too long");
-          } catch (IOException e) {
-            System.err.println(e);
-          }
-          serverAddresses.set(i, Broadcast);
-          deleted = true;
-        }
-      }
-      Lifespan.removeIf(n->(n == 0));
-      serverAddresses.removeIf(n->(n.equals(Broadcast)));
-      window.repaint();
-      if (deleted) {
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + serverAddresses.size());
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-      }
-      if (active) {
-        String Message = "Hello";
-        byte[] buffer = Message.getBytes();
-        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, Broadcast, LPORT);
-        try {
-          ExplorerSocket.send(packet);
-        } catch (IOException e) {
-          System.err.println("Failed to send message");
-        }
-      }
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException e){
-        Thread.currentThread().interrupt();
-        System.err.println(e);
-      }
-    }
-  }
-}
-
-class ListenerThread extends Thread {
-  private DatagramSocket ListenerSocket;
-  private byte[] buffer;
-  private DatagramPacket packet;
-  private List<InetAddress> serverAddresses;
-  private List<Integer> Lifespan;
-  private Window window;
-  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
-  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
-  ListenerThread (int PORT, List<InetAddress> serverAddresses, List<Integer> Lifespan, Window window) throws IOException {
-    this.serverAddresses = serverAddresses;
-    this.Lifespan = Lifespan;
-    this.window = window;
-    ListenerSocket = new DatagramSocket(PORT);
-    buffer = new byte[5];
-    packet = new DatagramPacket(buffer, 5);
-    start();
-  }
-  @Override
-  public void run() {
-    while(true) {
-      try {
-        ListenerSocket.receive(packet);
-        InetAddress received = packet.getAddress();
-        if (!serverAddresses.contains(received)) {
-          serverAddresses.add(received);
-          Lifespan.add(10);
-          window.repaint();
-          try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-          BufferedWriter b = new BufferedWriter(f); 
-          PrintWriter p = new PrintWriter(b);) {
-            p.println(timeForm.format(Calendar.getInstance().getTime())+" Got hello from " + received);
-            p.println(timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + serverAddresses.size());
-          } catch (IOException e) {
-            System.err.println(e);
-          }
-        } else {
-          Lifespan.set(serverAddresses.indexOf(received), 10);
-        }
-      } catch (IOException e){
-        System.err.println("Failed to recive data");
-      }
-    }
-  }
-}
-
 class MultiplicationThread extends Thread {
   private Socket clientNode;
-  List<InetAddress> serverAddresses;
   SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
   SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
-  public MultiplicationThread(ServerSocket serverNode, List<InetAddress> serverAddresses) {
-    this.serverAddresses = serverAddresses;
+  public MultiplicationThread(ServerSocket serverNode) {
     try {
       clientNode = serverNode.accept();
     } catch (IOException e) {
@@ -230,6 +112,7 @@ class MainWindow extends JFrame {
 	private JButton JBMode = new JButton();
 	private JButton JBRun = new JButton();
 	private JButton JBEther = new JButton();
+	private JButton JBServersNumber = new JButton();
 	private ImageIcon ImgAntOn;
 	private ImageIcon ImgAntOnDis;
 	private ImageIcon ImgAntOff;
@@ -240,28 +123,30 @@ class MainWindow extends JFrame {
 	private ImageIcon ImgEtherDis;
 	private int selectedNetworkInterface=0;
 	private int selectedIPnumber = 0;
-	private InetAddress selectedIP;
+	private InterfaceAddress selectedIP;
+	private ExplorerThread ExplorerThread;
+	private ListenerThread ListenerThread;
 	public MainWindow() {
 		super("Распределённое умножение матриц");
 		try {
-			ImgAntOn = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_on_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("antenna_on_125.svg"))));
-			ImgAntOnDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_on_disabled_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("antenna_on_disabled_125.svg"))));
-			ImgAntOff = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_off_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("antenna_off_125.svg"))));
-			ImgAntOffDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("antenna_off_disabled_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("antenna_off_disabled_125.svg"))));
-			ImgStop = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("stop_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("stop_125.svg"))));
-			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("start_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("start_125.svg"))));
-			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("start_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("start_125.svg"))));
-			ImgEther = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("ethernet_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("ethernet_125.svg"))));
-			ImgEtherDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(MainWindow.class.getResource("ethernet_disabled_100.svg")), 
-					ImageIO.read(MainWindow.class.getResource("ethernet_disabled_125.svg"))));
+			ImgAntOn = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("antenna_on_100.svg")), 
+					ImageIO.read(getClass().getResource("antenna_on_125.svg"))));
+			ImgAntOnDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("antenna_on_disabled_100.svg")), 
+					ImageIO.read(getClass().getResource("antenna_on_disabled_125.svg"))));
+			ImgAntOff = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("antenna_off_100.svg")), 
+					ImageIO.read(getClass().getResource("antenna_off_125.svg"))));
+			ImgAntOffDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("antenna_off_disabled_100.svg")), 
+					ImageIO.read(getClass().getResource("antenna_off_disabled_125.svg"))));
+			ImgStop = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("stop_100.svg")), 
+					ImageIO.read(getClass().getResource("stop_125.svg"))));
+			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("start_100.svg")), 
+					ImageIO.read(getClass().getResource("start_125.svg"))));
+			ImgStart = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("start_100.svg")), 
+					ImageIO.read(getClass().getResource("start_125.svg"))));
+			ImgEther = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("ethernet_100.svg")), 
+					ImageIO.read(getClass().getResource("ethernet_125.svg"))));
+			ImgEtherDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("ethernet_disabled_100.svg")), 
+					ImageIO.read(getClass().getResource("ethernet_disabled_125.svg"))));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -296,7 +181,7 @@ class MainWindow extends JFrame {
 		JPanel JStatusBar = new JPanel();
 		JStatusBar.setLayout(new BorderLayout());
 		JStatusBar.setBackground(new Color(230,230,230));
-		JButton JBServersNumber = new JButton("Количество активных серверов: " + Server.serverAddresses.size());
+		JBServersNumber.setText("Количество активных серверов: " + Server.serverAddresses.size());
 		JBServersNumber.setBorderPainted(false);
 		JBServersNumber.setFocusPainted(false);
 		JBServersNumber.setBackground(new Color(230,230,230));
@@ -307,9 +192,13 @@ class MainWindow extends JFrame {
 		setVisible(true);
 		setMinimumSize(new Dimension(500,500));
 	    SwingUtilities.invokeLater ( new Runnable() {
-	    	public void run() {new DialogMode();}
-	    }
-	    );
+	    	public void run() {
+	    		new DialogMode();
+				if (selectedIP == null) {
+					new DialogIP();
+				}
+	    	}
+	    });
 	}
 	class JBserversNumberMouseL implements MouseListener {
 		public void mouseClicked(MouseEvent e) {}
@@ -333,7 +222,8 @@ class MainWindow extends JFrame {
 	class JBModeActionL implements ActionListener {
 		public void actionPerformed(ActionEvent ae) {
 		    SwingUtilities.invokeLater ( new Runnable() {
-		    	public void run() {new DialogMode();}
+		    	public void run() {new DialogMode();
+		    	}
 		    }
 		    );
 		}
@@ -343,9 +233,20 @@ class MainWindow extends JFrame {
 		    if (Running) {
 				JBRun.setIcon(ImgStart);
 				JBRun.setToolTipText("Запустить сервер");
+				ExplorerThread.stopThread();
+			    ListenerThread.stopThread();
+			    Server.serverAddresses.clear();
+			    JBServersNumber.setText("Количество активных серверов: " + Server.serverAddresses.size());
+			    
 		    } else {
 				JBRun.setIcon(ImgStop);
 				JBRun.setToolTipText("Остановить сервер");
+				try {
+			        ExplorerThread = new ExplorerThread();
+			        ListenerThread = new ListenerThread();
+			      } catch(IOException e) {
+			        System.err.println(e);
+			    }
 		    }
 		    Running = !Running;
 		    JBMode.setEnabled(!JBMode.isEnabled());
@@ -356,7 +257,7 @@ class MainWindow extends JFrame {
 		private static final long serialVersionUID = -4826144205570259432L;
 		private ArrayList<String> NetList = new ArrayList<String>();
 		private ArrayList<ArrayList<String>> addrList = new ArrayList<ArrayList<String>>();
-		private ArrayList<ArrayList<InetAddress>> Addresses = new ArrayList<ArrayList<InetAddress>>();
+		private ArrayList<ArrayList<InterfaceAddress>> Addresses = new ArrayList<ArrayList<InterfaceAddress>>();
 		private JComboBox<String> JCNet = new JComboBox<String>();
 		private JComboBox<String> JCIP = new JComboBox<>();
 		public DialogIP() {
@@ -370,11 +271,11 @@ class MainWindow extends JFrame {
 					if(ifc.isUp() && !ifc.isLoopback()) {
 						NetList.add(ifc.getDisplayName());
 						addrList.add(new ArrayList<String>());
-						Addresses.add(new ArrayList<InetAddress>());
+						Addresses.add(new ArrayList<InterfaceAddress>());
 						for(InterfaceAddress ena : ifc.getInterfaceAddresses()) {
 							if ( ena.getAddress() instanceof Inet4Address) {
 								addrList.get(addrList.size()-1).add(ena.getAddress().getHostAddress()+"/"+ena.getNetworkPrefixLength());
-								Addresses.get(addrList.size()-1).add(ena.getAddress());
+								Addresses.get(addrList.size()-1).add(ena);
 							}
 						}
 					}
@@ -450,6 +351,8 @@ class MainWindow extends JFrame {
 		class JCNetActionL implements ActionListener {
 			public void actionPerformed(ActionEvent ae) {
 				selectedNetworkInterface=JCNet.getSelectedIndex();
+				selectedIPnumber = 0;
+				selectedIP=Addresses.get(selectedNetworkInterface).get(0);
 				DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>(addrList.get(selectedNetworkInterface).toArray(new String[0]));
 				JCIP.setModel(model);
 			}
@@ -539,6 +442,134 @@ class MainWindow extends JFrame {
 			}
 		}
 	}
+	class ExplorerThread extends Thread {
+		  private DatagramSocket ExplorerSocket;
+		  private boolean stopFlag;
+		  public ExplorerThread() throws IOException {
+		    ExplorerSocket = new DatagramSocket(Server.ExplorerPORT, selectedIP.getAddress());
+		    ExplorerSocket.setBroadcast(true);
+		    stopFlag = false;
+		    start();
+		  }
+		  synchronized void stopThread() {
+			  stopFlag = true;
+		  }
+		  @Override
+		  public void run() {
+		    while (!stopFlag) {
+		      boolean deleted = false;
+		      for (serverAddress i : Server.serverAddresses) {
+		        i.setLifespan(i.getLifespan()-1);
+		        if (i.getLifespan() == 0) {
+		          try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+Server.formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+		          BufferedWriter b = new BufferedWriter(f); 
+		          PrintWriter p = new PrintWriter(b);) {
+		            p.println(Server.timeForm.format(Calendar.getInstance().getTime())+" "+i.getAddress() + " Doesn't answer for too long");
+		          } catch (IOException e) {
+		            System.err.println(e);
+		          }
+		          deleted = true;
+		        }
+		      }
+		      Server.serverAddresses.removeIf(n->(n.getLifespan() == 0));
+		      JBServersNumber.setText("Количество активных серверов: " + Server.serverAddresses.size());
+		      if (deleted) {
+		        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+Server.formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+		        BufferedWriter b = new BufferedWriter(f); 
+		        PrintWriter p = new PrintWriter(b);) {
+		          p.println(Server.timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + Server.serverAddresses.size());
+		        } catch (IOException e) {
+		          System.err.println(e);
+		        }
+		      }
+		      if (Active) {
+		        String Message = "Hello";
+		        byte[] buffer = Message.getBytes(StandardCharsets.UTF_8);
+		        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, selectedIP.getBroadcast(), Server.ListenerPORT);
+		        try {
+		          ExplorerSocket.send(packet);
+		        } catch (IOException e) {
+		          System.err.println("Failed to send message");
+		        }
+		      }
+		      try {
+		    	  if (!stopFlag) {
+		    		  Thread.sleep(1000);
+		    	  }
+		      } catch (InterruptedException e){
+		        Thread.currentThread().interrupt();
+		        System.err.println(e);
+		      }
+		    }
+		    String EndMessage = "Break";
+	        byte[] buffer = EndMessage.getBytes(StandardCharsets.UTF_8);
+	        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, selectedIP.getBroadcast(), Server.ListenerPORT);
+	        try {
+	          ExplorerSocket.send(packet);
+	        } catch (IOException e) {
+	          System.err.println("Failed to send message");
+	        }
+		    ExplorerSocket.close();
+		  }
+		}
+	class ListenerThread extends Thread {
+		  private DatagramSocket ListenerSocket;
+		  private byte[] buffer;
+		  private DatagramPacket packet;
+		  private boolean stopFlag;
+		  ListenerThread () throws IOException {
+		    ListenerSocket = new DatagramSocket(Server.ListenerPORT, selectedIP.getAddress());
+		    ListenerSocket.setSoTimeout(2000);
+		    buffer = new byte[5];
+		    packet = new DatagramPacket(buffer, 5);
+		    stopFlag = false;
+		    start();
+		  }
+		  synchronized void stopThread() {
+			  stopFlag = true;
+		  }
+		  @Override
+		  public void run() {
+		    while(!stopFlag) {
+		      try {
+		        ListenerSocket.receive(packet);
+		        String message = new String(packet.getData(), StandardCharsets.UTF_8);
+		        InetAddress received = packet.getAddress();
+		        if (message.equals("Break")) {
+		        	if (Server.serverAddresses.contains(new serverAddress(received))) {
+		        		Server.serverAddresses.remove(new serverAddress(received));
+		        		JBServersNumber.setText("Количество активных серверов: " + Server.serverAddresses.size());
+		        	}
+		        	try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+Server.formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+				              BufferedWriter b = new BufferedWriter(f); 
+				              PrintWriter p = new PrintWriter(b);) {
+				        	  	  p.println(Server.timeForm.format(Calendar.getInstance().getTime())+" Server send break signal: " + received);
+				        	  	  p.println(Server.timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + (Server.serverAddresses.size()));
+				          } catch (IOException e) {
+				        	  System.err.println(e);
+				    }
+		        }
+		        else if (message.equals("Hello")&&!Server.serverAddresses.contains(new serverAddress(received))) {
+		        	Server.serverAddresses.add(new serverAddress(received));
+		        	JBServersNumber.setText("Количество активных серверов: " + Server.serverAddresses.size());
+		          try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+Server.formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+		              BufferedWriter b = new BufferedWriter(f); 
+		              PrintWriter p = new PrintWriter(b);) {
+		        	  	  p.println(Server.timeForm.format(Calendar.getInstance().getTime())+" Got hello from " + received);
+		        	  	  p.println(Server.timeForm.format(Calendar.getInstance().getTime())+" Servers number is " + Server.serverAddresses.size());
+		          } catch (IOException e) {
+		        	  System.err.println(e);
+		          }
+		        } else {
+		        	Server.serverAddresses.get(Server.serverAddresses.indexOf(new serverAddress(received))).setLifespan(10);
+		        }
+		      } catch (IOException e){
+		    	  System.err.println(e);
+		      	}
+		    }
+		    ListenerSocket.close();
+		  }
+		}
 }
 /* class WindowMode {
   JRadioButton active, passive;
@@ -677,15 +708,54 @@ class MainWindow extends JFrame {
     }
   }
 } */
+class serverAddress {
+	private int Lifespan;
+	private InetAddress Address;
+	public serverAddress(InetAddress Address) {
+		this.Address = Address;
+		this.Lifespan = 10;
+	}
+	public serverAddress(InetAddress Address, int Lifespan) {
+		this.Address = Address;
+		this.Lifespan = Lifespan;
+	}
+	public int getLifespan() {
+		return Lifespan;
+	}
+	public InetAddress getAddress() {
+		return Address;
+	}
+	public void setLifespan(int Lifespan) {
+		this.Lifespan = Lifespan;
+	}
+	public void setAddress(InetAddress Address) {
+		this.Address = Address;
+	}
+	@Override
+	public int hashCode() {
+		return Objects.hash(Address);
+	}
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		serverAddress other = (serverAddress) obj;
+		return Objects.equals(Address, other.Address);
+	}
+}
 public class Server {
     static int PORT = 9999;
     static int ListenerPORT = 9998;
     static int ExplorerPORT = 9997;
-    static List <InetAddress> serverAddresses = new ArrayList<InetAddress>();
+    static List <serverAddress> serverAddresses = new ArrayList<serverAddress>();
     static List <Integer> Lifespan = new ArrayList<Integer>();
+    static SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
+    static SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
     public static void main(String[] args) throws IOException{
-      SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
-      SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
       String log = Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt";
       ServerSocket serverNode = new ServerSocket(PORT);
       try (FileWriter f = new FileWriter(log, true); 
@@ -698,7 +768,7 @@ public class Server {
       }  
       );
       while (true) {
-        new MultiplicationThread(serverNode, serverAddresses);
+        new MultiplicationThread(serverNode);
       }
     }
 }
