@@ -14,23 +14,45 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JToolBar;
+import javax.swing.ListCellRenderer;
+import javax.swing.ListModel;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.LineBorder;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableModel;
 
 import org.apache.batik.swing.JSVGCanvas;
+
+import net.miginfocom.layout.AC;
+import net.miginfocom.layout.LC;
+import net.miginfocom.swing.MigLayout;
 
 import java.awt.*;
 import java.awt.event.*;
@@ -61,7 +83,13 @@ class MultiplicationThread extends Thread {
           PrintWriter p = new PrintWriter(b);) {
             p.println(timeForm.format(Calendar.getInstance().getTime())+" Connection accepted: "+ clientNode);
     	} catch (IOException e) {
-            System.err.println(e);
+    		try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+    	            BufferedWriter b = new BufferedWriter(f); 
+    	            PrintWriter p = new PrintWriter(b);) {
+    			p.println(timeForm.format(Calendar.getInstance().getTime())+"\t"+e);
+    		} catch (IOException e2) {
+    			System.err.println(e2);
+    		}
     	}
     	int[][] M1 = (int[][])in.readObject();
     	int[][] M2 = (int[][])in.readObject();
@@ -89,7 +117,13 @@ class MultiplicationThread extends Thread {
 	    in.close();
 	    clientNode.close();
     } catch(Exception e) {
-    	System.err.println("Error has occured"); 
+    	try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+	            BufferedWriter b = new BufferedWriter(f); 
+	            PrintWriter p = new PrintWriter(b);) {
+			p.println(timeForm.format(Calendar.getInstance().getTime())+"\t"+e);
+		} catch (IOException e2) {
+			System.err.println(e2);
+		}
     	}
   }
   public static int[][] Multiply (int[][] M1, int[][] M2) {
@@ -112,7 +146,15 @@ class MainWindow extends JFrame {
 	private JButton JBMode = new JButton();
 	private JButton JBRun = new JButton();
 	private JButton JBEther = new JButton();
+	private JButton JBFolder = new JButton();
 	private JButton JBServersNumber = new JButton();
+	private JButton JBMult = new JButton();
+	private JButton JBEqual = new JButton();
+	private JFileChooser JFChooser = new JFileChooser();
+	private JLabel JLTextCurrent = new JLabel();
+	private DefaultListModel<Matrix> matrixListModel = new DefaultListModel<Matrix>();
+	private JTable JTMatrix = new JTable();
+	private JLMatricesSelectionL ListSelectionL = new JLMatricesSelectionL();
 	private ImageIcon ImgAntOn;
 	private ImageIcon ImgAntOnDis;
 	private ImageIcon ImgAntOff;
@@ -121,11 +163,18 @@ class MainWindow extends JFrame {
 	private ImageIcon ImgStart;
 	private ImageIcon ImgEther;
 	private ImageIcon ImgEtherDis;
+	private ImageIcon ImgFolder;
+	private JList<Matrix> JLMatrices;
 	private int selectedNetworkInterface=0;
 	private int selectedIPnumber = 0;
 	private InterfaceAddress selectedIP;
 	private ExplorerThread ExplorerThread;
 	private ListenerThread ListenerThread;
+	private Matrix M1;
+	private Matrix M2;
+	private boolean M1_selected=false;
+	private boolean useAll = true;
+	private int serversUsing = 1;
 	public MainWindow() {
 		super("Распределённое умножение матриц");
 		try {
@@ -147,9 +196,18 @@ class MainWindow extends JFrame {
 					ImageIO.read(getClass().getResource("ethernet_125.svg"))));
 			ImgEtherDis = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("ethernet_disabled_100.svg")), 
 					ImageIO.read(getClass().getResource("ethernet_disabled_125.svg"))));
+			ImgFolder = new ImageIcon(new BaseMultiResolutionImage(ImageIO.read(getClass().getResource("folder_100.svg")), 
+					ImageIO.read(getClass().getResource("folder_125.svg"))));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
+	    JFChooser.setCurrentDirectory(new File("Matrices\\"));
+	    JFChooser.setAcceptAllFileFilterUsed(false);
+		FileNameExtensionFilter filter = new FileNameExtensionFilter(".dat","dat");
+		JFChooser.setFileFilter(filter);
+		JFChooser.setDialogTitle("Открыть");
+	    
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		setExtendedState(JFrame.MAXIMIZED_BOTH); 
 		JToolBar JTools = new JToolBar();
@@ -176,6 +234,15 @@ class MainWindow extends JFrame {
 		JBRun.setToolTipText("Запустить сервер");
 		JBRun.addActionListener(new JBRunActionL());
 		JTools.add(JBRun);
+		JTools.addSeparator();
+		
+		JBFolder.setIcon(ImgFolder);
+		JBFolder.setFocusPainted(false); 
+		JBFolder.setToolTipText("Открыть матрицу из файла");
+		JBFolder.addActionListener(new JBFolderActionL());
+		JTools.add(JBFolder);
+		JTools.addSeparator();
+		
 		add(JTools, BorderLayout.NORTH);
 		
 		JPanel JStatusBar = new JPanel();
@@ -186,8 +253,56 @@ class MainWindow extends JFrame {
 		JBServersNumber.setFocusPainted(false);
 		JBServersNumber.setBackground(new Color(230,230,230));
 		JBServersNumber.addMouseListener(new JBserversNumberMouseL());
+		JBServersNumber.addActionListener(new JBserversNumberActionL());
 		JStatusBar.add(JBServersNumber, BorderLayout.WEST);
 		add(JStatusBar, BorderLayout.SOUTH);
+		
+		JPanel JPMain = new JPanel();
+		MigLayout layout = new MigLayout ("align left center", "[10%][35%][10%][35%][10%]", "[23%][3%][50%][24%]");
+		JPMain.setLayout(layout);
+		JLMatrices = new JList<Matrix>(matrixListModel);
+		JLMatrices.setCellRenderer(new MatricesRenderer());
+		JLMatrices.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		JLMatrices.addListSelectionListener(ListSelectionL);
+		JLabel JLText = new JLabel("Список матриц:");
+		JLText.setHorizontalAlignment(SwingConstants.CENTER);
+		JLText.setFont(new Font("Sans-Serif", Font.PLAIN, 16));
+		JPMain.add(JLText, "cell 1 1, grow");
+		JPMain.add(new JScrollPane(JLMatrices), "cell 1 2, grow");
+		
+		JPanel JPButtons = new JPanel();
+		MigLayout JPBlayout = new MigLayout("align left center", "[]", "[11%][11%][11%][11%][11%][11%][33%]");
+		JPButtons.setLayout(JPBlayout);
+		JBMult.setText("×");
+		JBMult.setToolTipText("Необходимо выбрать матрицу");
+		JBMult.setEnabled(false);
+		JBMult.setFocusPainted(false);
+		JBMult.setFont(new Font("Sans-Serif", Font.PLAIN, 16));
+		JBMult.addActionListener(new JBMultActionL());
+		JPButtons.add(JBMult, "cell 0 1, dock center");
+		
+		JBEqual.setText("=");
+		JBEqual.setToolTipText("Необходимо выбрать две матрицы");
+		JBEqual.setEnabled(false);
+		JBEqual.setFocusPainted(false);
+		JBEqual.setFont(new Font("Sans-Serif", Font.PLAIN, 16));
+		JBEqual.addActionListener(new JBEqualActionL());
+		JPButtons.add(JBEqual, "cell 0 4, dock center");
+		
+		JPMain.add(JPButtons, "cell 2 2, grow");
+		
+		JLTextCurrent.setText("Матрица не выбрана");
+		JLTextCurrent.setHorizontalAlignment(SwingConstants.CENTER);
+		JLTextCurrent.setFont(new Font("Sans-Serif", Font.PLAIN, 16));
+		JPMain.add(JLTextCurrent, "cell 3 1, grow");
+		JTMatrix.setTableHeader(null);
+		JTMatrix.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+		JTMatrix.setDefaultRenderer(Object.class, centerRenderer);
+		JTMatrix.setFont(new Font("Sans-Serif", Font.PLAIN, 16));
+		JPMain.add(new JScrollPane(JTMatrix), "cell 3 2, grow");
+		add(JPMain, BorderLayout.CENTER);
 		
 		setVisible(true);
 		setMinimumSize(new Dimension(500,500));
@@ -200,6 +315,140 @@ class MainWindow extends JFrame {
 	    	}
 	    });
 	}
+	class MatricesRenderer extends JLabel implements ListCellRenderer<Object> {
+		private static final long serialVersionUID = 1706458350489650840L;
+		
+		public MatricesRenderer() {
+			setOpaque(true);
+		}
+
+		@Override
+		public Component getListCellRendererComponent(JList<? extends Object> list, Object value, int index,
+				boolean isSelected, boolean cellHasFocus) {
+			Matrix M = (Matrix)value;
+			setFont(new Font("Sans-Serif", Font.PLAIN, 16));
+			setText("  "+M.getName()+" ("+M.getRowNumber()+"×"+M.getColumnNumber()+")"); 
+			 if (isSelected) {
+		            setBackground(list.getSelectionBackground());
+		            setForeground(list.getSelectionForeground());
+	        } else {
+		            setBackground(list.getBackground());
+		            setForeground(list.getForeground());
+		    }
+			return this;
+		}
+	}
+	class JLMatricesSelectionL implements ListSelectionListener {
+		@Override
+		public void valueChanged(ListSelectionEvent e) {
+			Matrix current = ((JList<Matrix>)e.getSource()).getSelectedValue();
+			JTMatrix.setModel(new AbstractTableModel() {
+				private static final long serialVersionUID = 1L;
+				@Override
+	            public int getRowCount() {
+	                return current.getRowNumber();
+	            }
+
+	            @Override
+	            public int getColumnCount() {
+	                return current.getColumnNumber();
+	            }
+	            @Override
+	            public Object getValueAt(int rowIndex, int columnIndex) {
+	                return current.getData()[rowIndex][columnIndex];
+	            }
+			});	
+			JLTextCurrent.setText("Выбрана матрица: "+current.getName());
+			JBMult.setEnabled(true);
+			if (!M1_selected) {
+				JBMult.setToolTipText("Выбрать вторую матрицу");
+			} else {
+				JBEqual.setEnabled(true);
+				JBEqual.setToolTipText("Перемножить матрицы");
+			}
+		}
+	}
+	class JBserversNumberActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+		    SwingUtilities.invokeLater ( new Runnable() {
+		    	public void run() {new DialogServers();}
+		    }
+		    );
+		}
+	}
+	class DialogServers extends JDialog {
+		private static final long serialVersionUID = 6234740693862183001L;
+		private JComboBox<String> JCNet = new JComboBox<String>();
+		public DialogServers() {
+			super(MainWindow.this, "Список серверов");
+			setResizable(false); 
+			setModal(true);
+			
+			JPanel JPDialog = new JPanel();
+			JPDialog.setLayout(new BoxLayout(JPDialog, BoxLayout.Y_AXIS));
+			JPanel JPBar = new JPanel();
+			JPBar.setOpaque(false);
+			JPBar.setLayout(new BoxLayout(JPBar, BoxLayout.X_AXIS));
+        	DefaultListModel<serverAddress> listModel = new DefaultListModel<>();
+        	for (int i=0; i<Server.serverAddresses.size(); ++i) {
+        		listModel.addElement(Server.serverAddresses.get(i));
+        	}
+        	JList<serverAddress> ServerList = new JList<serverAddress>(listModel);
+        	ServerList.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+        	ServerList.setBorder(BorderFactory.createLineBorder(Color.black));
+        	JPBar.add(ServerList);
+        	JPBar.setAlignmentX(CENTER_ALIGNMENT);
+        	JPDialog.add(Box.createVerticalStrut(10));
+        	JPDialog.add(JPBar);
+        	JPDialog.add(Box.createVerticalStrut(10));
+        	
+        	JPanel JPChoise = new JPanel();
+        	JPChoise.setLayout(new BoxLayout(JPChoise, BoxLayout.X_AXIS));
+        	JPChoise.add(Box.createHorizontalStrut(10));
+        	JLabel Choise = new JLabel("Использовать: ");
+        	Choise.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+        	JPChoise.add(Choise);
+        	JCNet = new JComboBox<String>();
+        	for (int i=1; i<=Server.serverAddresses.size(); ++i) {
+        		JCNet.addItem(Integer.toString(i));
+        	}
+        	JCNet.addItem("Все");
+        	if (useAll) {
+        		JCNet.setSelectedItem("Все");
+        	} else {
+        		JCNet.setSelectedItem(serversUsing);
+        	}
+        	JPChoise.add(JCNet);
+        	JPChoise.add(Box.createHorizontalStrut(10));
+        	JPDialog.add(JPChoise);
+        	JPDialog.add(Box.createVerticalStrut(10));
+        	
+        	JPanel JPOk = new JPanel();
+			JPOk.setLayout(new BoxLayout(JPOk, BoxLayout.X_AXIS));
+			JButton JBOk = new JButton("OK");
+			JBOk.setAlignmentX(CENTER_ALIGNMENT);
+			JBOk.addActionListener(new JBOkActionL());
+			JPOk.add(JBOk);
+			JPDialog.add(JPOk);
+			JPDialog.add(Box.createVerticalStrut(10));
+			
+			add(JPDialog);
+			pack();
+			setLocation((Toolkit.getDefaultToolkit().getScreenSize().width)/2 - getWidth()/2, (Toolkit.getDefaultToolkit().getScreenSize().height)/2 - getHeight()/2);
+			setVisible(true);
+		}
+		class JBOkActionL implements ActionListener {
+			public void actionPerformed(ActionEvent ae) {
+				if (JCNet.getSelectedItem().equals("Все")) {
+					useAll = true;
+				} else {
+					useAll = false;
+					serversUsing=Integer.parseInt((String)JCNet.getSelectedItem());
+				}
+				dispose();
+			}
+		}
+	}
 	class JBserversNumberMouseL implements MouseListener {
 		public void mouseClicked(MouseEvent e) {}
 		public void mousePressed(MouseEvent e) {}
@@ -209,6 +458,59 @@ class MainWindow extends JFrame {
 		}
 		public void mouseExited(MouseEvent e) {
 			((JButton)e.getSource()).setBackground(new Color(230,230,230));
+		}
+	}
+	class JBMultActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+			if (!M1_selected) {
+				DefaultListModel<Matrix> newListModel = new DefaultListModel<Matrix>();
+				M1 = JLMatrices.getSelectedValue();
+				for (int i=0; i<matrixListModel.size(); ++i) {
+					if (M1.getColumnNumber()==matrixListModel.getElementAt(i).getRowNumber()) {
+						newListModel.addElement(matrixListModel.getElementAt(i));
+					}
+				}
+				JLMatrices.removeListSelectionListener(ListSelectionL);
+	        	JLMatrices.setModel(newListModel);
+	        	JLMatrices.addListSelectionListener(ListSelectionL);
+				JTMatrix.setModel(new DefaultTableModel());
+				JLTextCurrent.setText("Матрица не выбрана");
+				JBMult.setToolTipText("Отменить выбор");
+				JBMult.setText("-");
+				M1_selected = true;
+			} else {
+				JLMatrices.removeListSelectionListener(ListSelectionL);
+	        	JLMatrices.setModel(matrixListModel);
+	        	JLMatrices.addListSelectionListener(ListSelectionL);
+				JTMatrix.setModel(new DefaultTableModel());
+				JLTextCurrent.setText("Матрица не выбрана");
+				JBMult.setToolTipText("Выбрать вторую матрицу");
+				JBMult.setText("×");
+				JBMult.setEnabled(false);
+				M1_selected = false;
+				JBEqual.setToolTipText("Необходимо выбрать две матрицы");
+				JBEqual.setEnabled(false);
+			}
+		}
+	}
+	class JBEqualActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+			M2 = JLMatrices.getSelectedValue();
+			JLMatrices.removeListSelectionListener(ListSelectionL);
+        	JLMatrices.setModel(matrixListModel);
+        	JLMatrices.addListSelectionListener(ListSelectionL);
+			JTMatrix.setModel(new DefaultTableModel());
+			JLTextCurrent.setText("Матрица не выбрана");
+			JBMult.setToolTipText("Выбрать вторую матрицу");
+			JBMult.setText("×");
+			JBMult.setEnabled(false);
+			M1_selected = false;
+			JBEqual.setToolTipText("Необходимо выбрать две матрицы");
+			JBEqual.setEnabled(false);
+		    SwingUtilities.invokeLater ( new Runnable() {
+		    	public void run() {new DialogMultiply();}
+		    }
+		    );
 		}
 	}
 	class JBEtherActionL implements ActionListener {
@@ -251,6 +553,195 @@ class MainWindow extends JFrame {
 		    Running = !Running;
 		    JBMode.setEnabled(!JBMode.isEnabled());
 		    JBEther.setEnabled(!JBEther.isEnabled());
+		}
+	}
+	class JBFolderActionL implements ActionListener {
+		public void actionPerformed(ActionEvent ae) {
+			int returnVal = JFChooser.showOpenDialog(MainWindow.this);
+			if (returnVal == JFileChooser.APPROVE_OPTION) {
+	        	SwingUtilities.invokeLater ( new Runnable() {
+			    	public void run() {new DialogProgress();
+			    	}
+			    }
+			    );
+			}
+		}
+		class DialogProgress extends JDialog {
+			private static final long serialVersionUID = 1L;
+			private JProgressBar progressBar = new JProgressBar(0,1);
+			DialogProgress() {
+				super(MainWindow.this, "Идёт загрузка файла...");
+				setResizable(false); 
+				setModal(true);
+				JPanel JPDialog = new JPanel();
+				JPDialog.setBackground(Color.WHITE);
+				JPDialog.setLayout(new BoxLayout(JPDialog, BoxLayout.X_AXIS));
+				JPanel JPBar = new JPanel();
+				JPBar.setOpaque(false);
+				JPBar.setLayout(new BoxLayout(JPBar, BoxLayout.Y_AXIS));
+				progressBar.setValue(0);
+	        	progressBar.setStringPainted(true);
+	        	progressBar.setFont(new Font("Sans-Serif", Font.BOLD, 13));
+	        	progressBar.setForeground(new Color(0,200,0));
+	        	JPBar.add(Box.createVerticalStrut(10));
+	        	JPBar.add(progressBar);
+	        	JPBar.add(Box.createVerticalStrut(10));
+	        	JPDialog.add(Box.createHorizontalStrut(10));
+	        	JPDialog.add(JPBar);
+	        	JPDialog.add(Box.createHorizontalStrut(10));
+	        	add(JPDialog);
+				pack();
+				setLocation((Toolkit.getDefaultToolkit().getScreenSize().width)/2 - getWidth()/2, (Toolkit.getDefaultToolkit().getScreenSize().height)/2 - getHeight()/2);
+				new LoadingThread();
+				setVisible(true);
+		        
+			}
+			class LoadingThread extends Thread {
+				public LoadingThread() {
+					start();
+				}
+				@Override
+			    public void run() {
+					try (Scanner sc = new Scanner(JFChooser.getSelectedFile())) {
+			        	int l = sc.nextInt();
+			        	int n = sc.nextInt();
+			        	int totalLength = l*n;
+			        	progressBar.setMaximum(totalLength);
+			            int readLength = 0;
+			        	int[][] M = new int[l][n];
+			        	for (int i=0; i<l; ++i) {
+			        		for (int j=0; j<n; ++j) {
+			        			M[i][j]=sc.nextInt();
+			        			readLength+=1;
+			        			progressBar.setValue(readLength);
+			        		}
+			        	}
+			        	matrixListModel.addElement(new Matrix(JFChooser.getSelectedFile().getName().replaceFirst("[.][^.]+$", ""), M));
+			        	JLMatrices.removeListSelectionListener(ListSelectionL);
+			        	JLMatrices.setModel(matrixListModel);
+			        	JLMatrices.addListSelectionListener(ListSelectionL);
+			        }
+			        catch (FileNotFoundException e) {
+						System.out.println(e);
+					} 
+					DialogProgress.this.dispose();
+				}
+			}
+		}
+	}
+	class DialogMultiply extends JDialog {
+		private static final long serialVersionUID = 2808843896374862021L;
+		private JPanel JPMain = new JPanel();
+		private JTextField ResultName = new JTextField();
+		public DialogMultiply() {
+			super(MainWindow.this, "Перемножить матрицы");
+			setResizable(false); 
+			setModal(true);
+			
+			JPMain.setLayout(new BoxLayout(JPMain, BoxLayout.Y_AXIS));
+			JPMain.setBackground(Color.WHITE);
+			
+			JLabel JLmessageM1 = new JLabel("Первая матрица: "+M1.getName());
+			JLmessageM1.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+			JLmessageM1.setForeground(new Color(60,90,170));
+			JPanel JPmessageM1 = new JPanel();
+			JPmessageM1.add(Box.createHorizontalStrut(10));
+			JPmessageM1.add(JLmessageM1);
+			JPmessageM1.add(Box.createHorizontalStrut(10));
+			JPmessageM1.setOpaque(false);
+			JPMain.add(Box.createVerticalStrut(5));
+			JPMain.add(JPmessageM1);
+			JPMain.add(Box.createVerticalStrut(5));
+			
+			JLabel JLmessageM2 = new JLabel("Вторая матрица: "+M2.getName());
+			JLmessageM2.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+			JLmessageM2.setForeground(new Color(60,90,170));
+			JPanel JPmessageM2 = new JPanel();
+			JPmessageM2.add(Box.createHorizontalStrut(10));
+			JPmessageM2.add(JLmessageM2);
+			JPmessageM2.add(Box.createHorizontalStrut(10));
+			JPmessageM2.setOpaque(false);
+			JPMain.add(JPmessageM2);
+			JPMain.add(Box.createVerticalStrut(5));
+			
+			JPanel JPM3 = new JPanel();
+			JPM3.setLayout(new BoxLayout(JPM3, BoxLayout.X_AXIS));
+			JPM3.setOpaque(false);
+			JPM3.add(Box.createHorizontalStrut(10));
+			JLabel JLM3 = new JLabel("Результирующая матрица: ");
+			JLM3.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+			JLM3.setForeground(new Color(60,90,170));
+			JPM3.add(JLM3);
+			JPM3.add(Box.createHorizontalStrut(10));
+			ResultName = new JTextField("R_"+M1.getRowNumber()+"_"+M2.getColumnNumber());
+			JPM3.add(ResultName);
+			JPM3.add(Box.createHorizontalStrut(10));
+			JPMain.add(JPM3);
+			JPMain.add(Box.createVerticalStrut(5));
+			
+			JPanel JPOk = new JPanel();
+			JPOk.setLayout(new BoxLayout(JPOk, BoxLayout.Y_AXIS));
+			JPOk.add(Box.createVerticalStrut(10));
+			JButton JBOk = new JButton("OK");
+			JBOk.setAlignmentX(CENTER_ALIGNMENT);
+			JBOk.addActionListener(new JBOkActionL());
+			JPOk.add(JBOk);
+			JPOk.add(Box.createVerticalStrut(10));
+			JPMain.add(JPOk);
+			
+			add(JPMain);
+			
+			pack();
+			setLocation((Toolkit.getDefaultToolkit().getScreenSize().width)/2 - getWidth()/2, (Toolkit.getDefaultToolkit().getScreenSize().height)/2 - getHeight()/2);
+			setVisible(true);
+		}
+		class JBOkActionL implements ActionListener {
+			public void actionPerformed(ActionEvent ae) {
+				new WaitingThread();
+			}
+		}
+		class WaitingThread extends Thread {
+			public WaitingThread() {
+				start();
+			}
+			@Override
+		    public void run() {
+				DialogMultiply.this.remove(JPMain);
+				JPanel JPDialog = new JPanel();
+				JPDialog.setBackground(Color.WHITE);
+				JPDialog.setLayout(new BoxLayout(JPDialog, BoxLayout.X_AXIS));
+				JPanel JPBar = new JPanel();
+				JPBar.setOpaque(false);
+				JPBar.setLayout(new BoxLayout(JPBar, BoxLayout.Y_AXIS));
+	        	JPBar.add(Box.createVerticalStrut(10));
+	        	JLabel Label = new JLabel("Идёт процесс перемножения");
+	        	Label.setFont(new Font("Sans-Serif", Font.PLAIN, 13));
+	        	Label.setForeground(new Color(60,90,170));
+	        	JPBar.add(Label);
+	        	JPBar.add(Box.createVerticalStrut(10));
+	        	JPDialog.add(Box.createHorizontalStrut(10));
+	        	JPDialog.add(JPBar);
+	        	JPDialog.add(Box.createHorizontalStrut(10));
+	        	add(JPDialog);
+				pack();
+				Client.M1 = M1.getData();
+				Client.M2 = M2.getData();
+				if (useAll) {
+					Client.useNs = Server.serverAddresses.size();
+				} else {
+					Client.useNs = serversUsing;
+				}
+				try {
+					Client.main(null);
+				} catch (IOException e) {
+					System.out.println(e);
+				}
+				matrixListModel.addElement(new Matrix(ResultName.getText(), Client.Result));
+	        	JLMatrices.removeListSelectionListener(ListSelectionL);
+	        	JLMatrices.setModel(matrixListModel);
+	        	JLMatrices.addListSelectionListener(ListSelectionL);
+				DialogMultiply.this.dispose();
+			}
 		}
 	}
 	class DialogIP extends JDialog {
@@ -571,143 +1062,6 @@ class MainWindow extends JFrame {
 		  }
 		}
 }
-/* class WindowMode {
-  JRadioButton active, passive;
-  ButtonGroup mode;
-  Button OK;
-  TextArea text;
-  boolean started = false;
-  FileDialog fd1 = new FileDialog(this);
-  FileDialog fd2 = new FileDialog(this);
-  TextField tf1;
-  Button Matrix1;
-  Button Matrix2;
-  Button Mult;
-  SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
-  SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
-  public Window() {
-    setLayout(new FlowLayout());
-    String str = "Выберите режим работы узла. \n" +
-    "В пассивном режиме узел не сообщает о своём присутствии в сети и не учавствует в перемножении матриц \n";
-    text = new TextArea(str, 3, 30, TextArea.SCROLLBARS_NONE);
-    text.setEditable(false);
-    text.setBackground(Color.white);
-    new java.awt.Font(Font.MONOSPACED, Font.PLAIN, 6);
-    mode = new CheckboxGroup();
-    active = new Checkbox("активный", mode, true);
-    passive = new Checkbox("пассивный", mode, false);
-    OK = new Button("ОК");
-    add(text);
-    add(active);
-    add(passive);
-    add(OK);
-    OK.addActionListener(this);
-    addWindowListener(new WindowAdapter() {
-      public void windowClosing(WindowEvent we) {
-        System.exit(0);
-      }
-    });
-    setSize(300,150);
-    setTitle("Распределённое умножение матриц");
-  }
-  public void actionPerformed(ActionEvent ae) {
-    String name = ae.getActionCommand();
-    if (name.equals("ОК")) {
-      try {
-        new ExplorerThread(Server.ExplorerPORT, Server.ListenerPORT, Server.serverAddresses, Server.Lifespan, mode.getSelectedCheckbox().getLabel().equals("активный"), this);
-        new ListenerThread(Server.ListenerPORT, Server.serverAddresses, Server.Lifespan, this);
-      } catch(IOException e) {
-        System.err.println(e);
-      }
-      remove(text);
-      remove(active);
-      remove(passive);
-      remove(OK);
-      started = true;
-      Matrix1 = new Button("Выбрать первую матрицу");
-      Matrix2 = new Button("Выбрать вторую матрицу");
-      Mult = new Button("Перемножить матрицы");
-      Matrix1.setActionCommand("Matrix1");
-      Matrix2.setActionCommand("Matrix2");
-      Mult.setActionCommand("Mult");
-      Matrix1.addActionListener(this);
-      Matrix2.addActionListener(this);
-      Mult.addActionListener(this);
-      Mult.setEnabled(false);
-      tf1 = new TextField("1");
-      add(tf1);
-      add(Matrix1);
-      add(Matrix2);
-      add(Mult);
-      validate();
-    } else if (name.equals("Matrix1")) {
-      fd1 = new FileDialog(this);
-      fd1.setDirectory("Matrices\\");
-      fd1.setFile("*.dat");
-      fd1.setVisible(true);
-      Client.FileName1 = fd1.getDirectory()+fd1.getFile();
-      if (fd1.getFile()!=null) {
-        Matrix1.setLabel("Изменить первую матрицу");
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" File of the first matrix is " + fd1.getFile());
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-      } else {
-        Matrix1.setLabel("Выбрать первую матрицу");
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" No file of the first matrix");
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-      }
-      repaint();
-    } else if (name.equals("Matrix2")) {
-      fd2 = new FileDialog(this);
-      fd2.setDirectory("Matrices\\");
-      fd2.setFile("*.dat");
-      fd2.setVisible(true);
-      Client.FileName2 = fd2.getDirectory()+fd2.getFile();
-      if (fd2.getFile()!=null) {
-        Matrix2.setLabel("Изменить вторую матрицу");
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" File of the second matrix is " + fd2.getFile());
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-      } else {
-        Matrix2.setLabel("Выбрать вторую матрицу");
-        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-        BufferedWriter b = new BufferedWriter(f); 
-        PrintWriter p = new PrintWriter(b);) {
-          p.println(timeForm.format(Calendar.getInstance().getTime())+" No file of the second matrix");
-        } catch (IOException e) {
-          System.err.println(e);
-        }
-      }
-      repaint();
-    } else if (name.equals("Mult")) {
-      try {
-    	Client.useNs = Integer.parseInt(tf1.getText());
-        Client.main(null);
-      } catch (IOException e) {
-        System.err.println(e);
-      }
-    }
-  }
-  public void paint(Graphics g) {
-    if (started) g.drawString("Число активных серверов: " + Server.serverAddresses.size(), 10, 130);
-    if (Server.serverAddresses.size()>0 & fd1.getFile()!=null & fd2.getFile()!=null) {
-      Mult.setEnabled(true);
-    }
-  }
-} */
 class serverAddress {
 	private int Lifespan;
 	private InetAddress Address;
@@ -746,29 +1100,72 @@ class serverAddress {
 		serverAddress other = (serverAddress) obj;
 		return Objects.equals(Address, other.Address);
 	}
+	@Override
+	public String toString() {
+		return Address.getHostAddress();
+	}
+}
+class Matrix {
+	private int[][] data;
+	private int columnNumber;
+	private int rowNumber;
+	private String name;
+	public Matrix(String name, int[][] data) {
+		this.data = data;
+		this.name = name;
+		rowNumber = data.length;
+		columnNumber = data[0].length;
+	}
+	public int[][] getData() {
+		return data;
+	}
+	public int getColumnNumber() {
+		return columnNumber;
+	}
+	public int getRowNumber() {
+		return rowNumber;
+	}
+	public String getName() {
+		return name;
+	}
 }
 public class Server {
     static int PORT = 9999;
     static int ListenerPORT = 9998;
     static int ExplorerPORT = 9997;
     static List <serverAddress> serverAddresses = new ArrayList<serverAddress>();
-    static List <Integer> Lifespan = new ArrayList<Integer>();
     static SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
     static SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
     public static void main(String[] args) throws IOException{
-      String log = Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt";
-      ServerSocket serverNode = new ServerSocket(PORT);
-      try (FileWriter f = new FileWriter(log, true); 
-      BufferedWriter b = new BufferedWriter(f); 
-      PrintWriter p = new PrintWriter(b);) {
-        p.println(timeForm.format(Calendar.getInstance().getTime())+" Program has started. "+serverNode);
-      }
-      SwingUtilities.invokeLater ( new Runnable() {
-    	  public void run() {new MainWindow();}
-      }  
-      );
-      while (true) {
-        new MultiplicationThread(serverNode);
-      }
+		UIManager.put("FileChooser.openButtonText", "Открыть");
+		UIManager.put("FileChooser.openButtonToolTipText", "Открыть выбранный файл");
+	    UIManager.put("FileChooser.cancelButtonText", "Отмена");
+	    UIManager.put("FileChooser.cancelButtonToolTipText", "Прервать диалог выбора файла");
+	    UIManager.put("FileChooser.lookInLabelText", "Смотреть в");
+	    UIManager.put("FileChooser.fileNameLabelText", "Имя файла");
+	    UIManager.put("FileChooser.filesOfTypeLabelText", "Тип файла");
+	    UIManager.put("FileChooser.upFolderToolTipText", "На один уровень вверх");
+	    UIManager.put("FileChooser.newFolderToolTipText", "Создание новой папки");
+	    UIManager.put("FileChooser.listViewButtonToolTipText", "Список");
+	    UIManager.put("FileChooser.createButtonText", "Обновить");
+	    UIManager.put("FileChooser.detailsViewButtonToolTipText", "Таблица");
+	    UIManager.put("FileChooser.homeFolderToolTipText", "Рабочий стол");
+	    UIManager.put("FileChooser.fileNameHeaderText", "Имя");
+	    UIManager.put("FileChooser.fileSizeHeaderText", "Размер");
+	    UIManager.put("FileChooser.fileTypeHeaderText", "Тип");
+	    UIManager.put("FileChooser.fileDateHeaderText", "Изменён");
+	    String log = Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt";
+	    ServerSocket serverNode = new ServerSocket(PORT);
+	    try (FileWriter f = new FileWriter(log, true); 
+	    		BufferedWriter b = new BufferedWriter(f); 
+	    		PrintWriter p = new PrintWriter(b);) {
+	    	p.println(timeForm.format(Calendar.getInstance().getTime())+" Program has started. "+serverNode);
+	    }
+	    SwingUtilities.invokeLater ( new Runnable() {
+	    	public void run() {new MainWindow();}
+	    });
+	    while (true) {
+	    	new MultiplicationThread(serverNode);
+	    }
     }
 }

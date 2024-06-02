@@ -49,49 +49,37 @@ class ClientThread extends Thread {
             multiplication = in.readLong();
             elapsed = Duration.between(Start, Finish).toMillis();
             transfer = elapsed-multiplication;
+            in.close();
+            out.close();
             clientNode.close();
         } catch (IOException | ClassNotFoundException e) {
-            System.out.println("Socket has crashed");
+        	try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+Server.formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+    	            BufferedWriter b = new BufferedWriter(f); 
+    	            PrintWriter p = new PrintWriter(b);) {
+    			p.println(Server.timeForm.format(Calendar.getInstance().getTime())+"\t"+e);
+    		} catch (IOException e2) {
+    			System.err.println(e2);
+    		}
         }
     }
 }
 
 public class Client {
-    static String FileName1 = "Matrices/A.dat";
-    static String FileName2 = "Matrices/B.dat";
+    static int[][] M1;
+    static int[][] M2;
+    static int[][] Result;
     static int useNs = -1;
     public static void main(String[] args) throws IOException{
-        String FileNameOfResult = "Matrices/Result.txt";
-        InetAddress[] servers =  Server.serverAddresses.toArray(new InetAddress[0]);
+        InetAddress[] servers =  new InetAddress[Server.serverAddresses.size()];
+        for (int i=0; i<servers.length; ++i) {
+        	servers[i] = Server.serverAddresses.get(i).getAddress();
+        }
         int serversNumber = servers.length;
-        int l, n, m;
-        int[][] M1, M2;
+        int n = M1.length;
+        int m = M2[0].length;
+        Result = new int[n][m];
         SimpleDateFormat formatter=new SimpleDateFormat("yyyy-MM-dd"); 
         SimpleDateFormat timeForm=new SimpleDateFormat("HH:mm:ss"); 
-        try (Scanner sc = new Scanner(new File(FileName1))) {
-        	l = sc.nextInt();
-        	n = sc.nextInt();
-        	M1 = new int[l][n];
-        	for (int i=0; i<l; ++i) {
-        		for (int j=0; j<n; ++j) {
-        			M1[i][j]=sc.nextInt();
-        		}
-        	}
-        }
-        try (Scanner sc = new Scanner(new File(FileName2))) {
-        	n = sc.nextInt();
-        	m = sc.nextInt();
-        	M2 = new int[n][m];
-        	for (int i=0; i<n; ++i) {
-        		for (int j=0; j<m; ++j) {
-        			M2[i][j]=sc.nextInt();
-        		}
-        	}
-        }
-        int[][] Result = new int[l][m];
-        //InetAddress[] servers = {InetAddress.getByName("223.0.0.1"), InetAddress.getByName("223.0.0.2"), InetAddress.getByName("223.0.0.3"), InetAddress.getByName("223.0.0.4")};
-        //int serversNumber = 1;
-        //InetAddress[] servers = {InetAddress.getByName("223.0.0.1")};
         if (useNs!=-1) {
         	serversNumber = useNs;
         }
@@ -108,7 +96,13 @@ public class Client {
                 Threads[i].join();
             } catch (InterruptedException e) {
                 Threads[i].interrupt();
-                System.err.println(e);
+                try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+        	            BufferedWriter b = new BufferedWriter(f); 
+        	            PrintWriter p = new PrintWriter(b);) {
+        			p.println(timeForm.format(Calendar.getInstance().getTime())+"\t"+e);
+        		} catch (IOException e2) {
+        			System.err.println(e2);
+        		}
             }
         }
         String Times[] = new String[cThr];
@@ -145,37 +139,6 @@ public class Client {
             } catch (IOException e) {
             System.err.println(e);
             }
-        }
-        try (FileOutputStream f2 = new FileOutputStream(FileNameOfResult)) {
-            for (int i=0; i < Integer.toString(l).length(); i++) {
-                f2.write(Integer.toString(l).charAt(i));
-            }
-            f2.write(' ');
-            for (int i=0; i < Integer.toString(m).length(); i++) {
-                f2.write(Integer.toString(m).charAt(i));
-            }
-            f2.write(' ');
-            f2.write('\n');
-            for (int y = 0; y < l; y++) {
-                for (int x = 0; x < m; x++) {
-                    String str = Integer.toString(Result[y][x]);
-                    for (int i=0; i < str.length(); i++) {
-                        f2.write(str.charAt(i));
-                    }
-                    f2.write(' ');
-                }
-                f2.write('\n');
-            }
-            try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+formatter.format(Calendar.getInstance().getTime())+".txt", true); 
-            BufferedWriter b = new BufferedWriter(f); 
-            PrintWriter p = new PrintWriter(b);) {
-            p.println(timeForm.format(Calendar.getInstance().getTime())+" Writing is succeseful");
-            } catch (IOException e) {
-            System.err.println(e);
-            }
-        }  catch (Exception e) {
-            System.err.println(e);
-            return;
         }
     }
     static int[][][] Distribute(int serversNumber, int[][] M, int[] rowsNumber) {
