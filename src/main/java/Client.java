@@ -61,6 +61,13 @@ class ClientThread extends Thread {
     			System.err.println(e2);
     		}
         }
+        try (FileWriter f = new FileWriter(Files.createDirectories(Paths.get("logs")).toAbsolutePath().toString()+"/log-"+Server.formatter.format(Calendar.getInstance().getTime())+".txt", true); 
+	            BufferedWriter b = new BufferedWriter(f); 
+	            PrintWriter p = new PrintWriter(b);) {
+			p.println(Server.timeForm.format(Calendar.getInstance().getTime())+"\tGot answer from: "+serverIP);
+		} catch (IOException e2) {
+			System.err.println(e2);
+		}
     }
 }
 
